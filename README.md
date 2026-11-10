@@ -8,10 +8,11 @@ os dados são de exemplo e ficam só no navegador de quem abre. "Recomeçar do z
 |---|---|
 | (novo) | Agenda: colunas por profissional/sala, semana, linha do "agora", arrastar para remarcar, gaveta com status (Agendado → Confirmado → Na recepção → Em atendimento → Finalizado, Faltou), confirmação por WhatsApp, horários livres |
 | Visão geral | Resumo do dia: números do dia, "Precisa de atenção", tarefas até amanhã, novos contatos, espaço dos laudos |
-| Funil de vendas | Jornada do paciente: Novo contato → Consulta marcada → Exames → Retorno (arrastar e soltar) |
-| Negociação + proposta | Jornada do paciente: histórico, exame de interesse, orçamento (convênio/desconto/parcelas), próximos passos, concluir ou "não seguiu" com motivo |
+| Funil de vendas | Retirado do menu. Cada contato vira um "atendimento" dentro da ficha do paciente |
+| Negociação + proposta | Atendimento: histórico, exame de interesse, orçamento (convênio/desconto/parcelas), próximos passos, concluir ou "não seguiu" com motivo |
 | Proposta impressa | Orçamento impresso / PDF |
-| Clientes | Pacientes: ficha com fatores de risco, alerta clínico, última PA/FC, remédios, exclusão LGPD |
+| Clientes | Pacientes e prontuário: ficha em abas (Prontuário, Cadastro, Atendimentos e horários) |
+| (novo) | Prontuário: evoluções com exame físico (IMC automático), hipóteses CID-10, conduta, prescrição e exames pedidos; rascunho salvo sozinho; assinatura que trava a evolução (só adendos depois); receita impressa; lista de problemas; gráfico da PA nas consultas; anexos; guarda de 20 anos (Lei 13.787/2018) |
 | Estoque | Exames e consultas: preço, duração, convênio, preparo, status (Disponível, Agenda cheia, Pausado, Arquivado) |
 | Anúncios (Mercado Livre e Meta) | Divulgação: Doctoralia e link de WhatsApp para o Perfil da Empresa no Google, aviso da Resolução CFM 2.336/2023 |
 | Loja (configurações) | Consultório: contato, CRM/RQE, troca de senha |

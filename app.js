@@ -88,7 +88,7 @@ function comTransicao(fn) {
   try {
     const t = document.startViewTransition(fn);
     // Uma transição interrompida por outra (cliques rápidos) não é erro
-    t.ready.catch(() => {}); t.finished.catch(() => {});
+    t.ready.catch(() => {}); t.finished.catch(() => {}); t.updateCallbackDone.catch((e) => console.error(e));
   } catch { fn(); }
 }
 // Números "leem" até o valor, como num monitor.
@@ -209,7 +209,7 @@ function telaEntrada() {
         <span class="marca-sinal" style="width:38px;height:38px"><svg viewBox="0 0 32 32" width="24" height="24"><path d="M3 17h6l2-4 3 9 3-14 2.5 9H29" fill="none" stroke="white" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/></svg></span>
         <div><b>${esc(D().settings.nome)}</b><div class="small muted">Painel do consultório · demonstração</div></div>
       </div>
-      <p>Agenda, pacientes, jornada do primeiro contato ao retorno, exames e orçamentos, num lugar só. Entre com o acesso de demonstração:</p>
+      <p>Agenda, prontuário, pacientes, exames e orçamentos, num lugar só. Entre com o acesso de demonstração:</p>
       <label class="campo">E-mail<input type="email" name="email" value="recepcao@ritmocardio.demo" autocomplete="off"></label>
       <label class="campo">Senha<input type="password" name="senha" value="demonstracao" autocomplete="off"></label>
       <button class="btn acento">Entrar no painel</button>
@@ -228,8 +228,10 @@ function telaEntrada() {
 const rotas = [
   [/^$/, telaAgenda],
   [/^hoje$/, telaHoje],
-  [/^jornada$/, telaJornada],
-  [/^jornada\/(.+)$/, telaJornadaDetalhe],
+  [/^atendimento\/(.+)$/, telaJornadaDetalhe],
+  [/^jornada\/(.+)$/, telaJornadaDetalhe], // links antigos
+  [/^jornada$/, telaPacientes],
+  [/^receita\/(.+)\/(.+)$/, telaReceita],
   [/^pacientes$/, telaPacientes],
   [/^pacientes\/(.+)$/, telaPaciente],
   [/^servicos$/, telaServicos],
@@ -245,7 +247,7 @@ function render() {
   $('#app').hidden = false;
   const caminho = location.hash.replace(/^#\/?/, '').split('?')[0].replace(/\/$/, '');
   const aba = caminho.split('/')[0];
-  const ativa = aba === 'orcamento' ? 'jornada' : aba;
+  const ativa = ['orcamento', 'atendimento', 'receita'].includes(aba) ? 'pacientes' : aba;
   $$('#nav a').forEach((a) => { if (a.dataset.aba === ativa) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
   $('#cel-titulo').textContent = $('#nav a[aria-current] span')?.textContent || D().settings.nome;
   atualizarContagens();
@@ -287,13 +289,15 @@ function pendencias() {
     if (!ABERTAS.includes(j.etapa)) continue;
     const p = paciente(j.pacienteId); if (!p) continue;
     const dias = diasDesde(j.etapaDesde);
-    const link = `#/jornada/${j.id}`;
+    const link = `#/atendimento/${j.id}`;
     if (j.etapa === 'novo' && dias >= 1) out.push({ cod: 'SEM RESP', titulo: p.nome, texto: `${j.pedido} sem resposta ${dias === 1 ? 'desde ontem' : `há ${dias} dias`}.`, peso: 3, link });
     if (j.etapa === 'exames' && dias >= 21) out.push({ cod: servico(j.servicoId)?.sigla || 'EXAME', titulo: p.nome, texto: `${dias} dias em Exames. Já fez o exame? Vale ligar.`, peso: 2, link });
     if (j.orcamento?.validade && j.orcamento.validade < hojeISO()) out.push({ cod: 'ORÇ', titulo: p.nome, texto: `Orçamento venceu em ${dataCurta(j.orcamento.validade + 'T12:00')}. Renove antes de cobrar.`, peso: 1, link });
   }
   for (const p of d.pacientes) {
     const link = `#/pacientes/${p.id}`;
+    const rasc = (p.prontuario?.evolucoes || []).filter((e) => !e.assinada).length;
+    if (rasc) out.push({ cod: 'EVOL', titulo: p.nome, texto: `${plural(rasc, 'evolução', 'evoluções')} no prontuário sem assinatura.`, peso: 2, link });
     if (!soDigitos(p.telefone)) out.push({ cod: 'S/ TEL', titulo: p.nome, texto: 'Sem telefone. Sem ele não dá para confirmar consulta.', peso: 3, link });
     if (p.medida && paFora(p.medida.pa) && diasDesde(p.medida.em) >= 30) out.push({ cod: 'PA', titulo: p.nome, texto: `PA ${p.medida.pa} na última medida, há ${diasDesde(p.medida.em)} dias. Antecipar o retorno?`, peso: 2, link });
     if (p.alerta && p.medida && diasDesde(p.medida.em) >= 180) out.push({ cod: 'ALERTA', titulo: p.nome, texto: `${p.alerta}, sem consulta há ${diasDesde(p.medida.em)} dias.`, peso: 3, link, alerta: true });
@@ -316,6 +320,7 @@ function telaHoje(el) {
   const abertas = d.jornadas.filter((j) => ABERTAS.includes(j.etapa));
   const novos = d.jornadas.filter((j) => j.etapa === 'novo').sort((a, b) => b.criado.localeCompare(a.criado));
   const agendaHoje = agendaDoDia(chaveDia(new Date()));
+  const rascunhos = d.pacientes.flatMap((p) => (p.prontuario?.evolucoes || []).filter((e) => !e.assinada));
   const proximos = agendaHoje.filter((a) => !['finalizado', 'faltou'].includes(a.status)).slice(0, 5);
   const emAberto = abertas.reduce((t, j) => t + saldo(j.orcamento), 0);
   const media = abertas.length ? Math.round(abertas.reduce((t, j) => t + diasDesde(j.criado), 0) / abertas.length) : 0;
@@ -332,12 +337,12 @@ function telaHoje(el) {
         <h1>Resumo do dia</h1>
         <div class="meta">${esc(hoje)} · ${plural(novos.length, 'pedido novo', 'pedidos novos')} · ${plural(atrasadas, 'tarefa atrasada', 'tarefas atrasadas')}</div>
       </div>
-      <div class="acoes"><button class="btn" data-nova-jornada>+ Nova jornada</button></div>
+      <div class="acoes"><button class="btn" data-nova-jornada>+ Novo contato</button></div>
     </div>
     <section class="monitor" aria-label="Resumo do consultório hoje">
       <div class="monitor-cab">
         <span class="vivo" aria-hidden="true"></span>
-        <span class="rotulo">Pulso do consultório · <b>${plural(abertas.length, 'paciente', 'pacientes')} em jornada</b></span>
+        <span class="rotulo">Pulso do consultório · <b>${plural(abertas.length, 'paciente', 'pacientes')} em acompanhamento</b></span>
         <span class="relogio" id="relogio">${hora(new Date().toISOString())}</span>
       </div>
       <svg class="varredura" viewBox="0 0 1000 92" preserveAspectRatio="none" aria-hidden="true">
@@ -345,11 +350,11 @@ function telaHoje(el) {
         <path class="vivo" d="${tiraECG(1000, 58, 125, 2.3, 40)}"/>
       </svg>
       <dl class="leituras">
-        <a class="leitura destaque" href="#/jornada"><dt>Novos contatos</dt><dd data-conta="${novos.length}">${novos.length}</dd><span class="nota">esperando resposta</span></a>
-        <a class="leitura" href="#/jornada"><dt>Em jornada</dt><dd data-conta="${abertas.length}">${abertas.length}</dd><span class="nota">do contato ao retorno</span></a>
+        <a class="leitura destaque" href="#/pacientes?f=novos"><dt>Novos contatos</dt><dd data-conta="${novos.length}">${novos.length}</dd><span class="nota">esperando resposta</span></a>
+        <a class="leitura" href="#/pacientes?f=rascunho"><dt>Evoluções a assinar</dt><dd data-conta="${rascunhos.length}">${rascunhos.length}</dd><span class="nota">rascunhos no prontuário</span></a>
         <a class="leitura" href="#/"><dt>Horários hoje</dt><dd data-conta="${agendaHoje.length}">${agendaHoje.length}</dd><span class="nota">${agendaHoje.filter((a) => a.status === 'finalizado').length} atendidos · ${agendaHoje.filter((a) => a.status === 'faltou').length} faltas</span></a>
-        <a class="leitura" href="#/jornada"><dt>Orçamentos em aberto</dt><dd data-conta="${emAberto}" data-formato="brl">${brl(emAberto)}</dd><span class="nota">saldo a receber</span></a>
-        <a class="leitura" href="#/jornada"><dt>Média na jornada</dt><dd><span data-conta="${media}">${media}</span><small>${media === 1 ? 'dia' : 'dias'}</small></dd><span class="nota">desde o primeiro contato</span></a>
+        <a class="leitura" href="#/pacientes"><dt>Orçamentos em aberto</dt><dd data-conta="${emAberto}" data-formato="brl">${brl(emAberto)}</dd><span class="nota">saldo a receber</span></a>
+        <a class="leitura" href="#/pacientes"><dt>Em acompanhamento</dt><dd data-conta="${abertas.length}">${abertas.length}</dd><span class="nota">do contato ao retorno</span></a>
       </dl>
     </section>
     <div class="grade-home">
@@ -379,18 +384,18 @@ function telaHoje(el) {
           </ul>`}
         </section>
         <section aria-labelledby="h-tarefas">
-          <h2 class="secao" id="h-tarefas">Tarefas até amanhã <span class="num">${tarefas.length}</span><a class="link" href="#/jornada">Jornada</a></h2>
+          <h2 class="secao" id="h-tarefas">Tarefas até amanhã <span class="num">${tarefas.length}</span></h2>
           ${tarefas.length === 0 ? '<p class="vazio">Nada marcado para hoje ou amanhã.</p>' : `
           <ul class="lista" id="lista-tarefas">
             ${tarefas.slice(0, 7).map((t) => linhaTarefa(t, true)).join('')}
           </ul>`}
         </section>
         <section aria-labelledby="h-novos">
-          <h2 class="secao" id="h-novos">Novos contatos <span class="num">${novos.length}</span>${novos.length ? '<span class="ponto-vivo" aria-hidden="true"></span>' : ''}<a class="link" href="#/jornada">Ver todos</a></h2>
+          <h2 class="secao" id="h-novos">Novos contatos <span class="num">${novos.length}</span>${novos.length ? '<span class="ponto-vivo" aria-hidden="true"></span>' : ''}<a class="link" href="#/pacientes?f=novos">Ver todos</a></h2>
           ${novos.length === 0 ? '<p class="vazio">Nenhum paciente esperando resposta.</p>' : `
           <ul class="lista">
             ${novos.slice(0, 5).map((j) => { const p = paciente(j.pacienteId); const s = servico(j.servicoId); return `
-              <li><a class="linha" href="#/jornada/${j.id}">
+              <li><a class="linha" href="#/atendimento/${j.id}">
                 <span class="corpo"><span class="titulo">${esc(p?.nome)}</span><span class="sub">${esc(j.pedido)}${s ? ` · ${esc(s.nome)}` : ''}</span></span>
                 <span class="small faint">${tempoAtras(j.criado)}</span>
               </a></li>`; }).join('')}
@@ -413,7 +418,7 @@ function telaHoje(el) {
 function linhaTarefa(t, comRef) {
   const j = t.jornadaId ? jornada(t.jornadaId) : null;
   const p = j ? paciente(j.pacienteId) : t.pacienteId ? paciente(t.pacienteId) : null;
-  const link = j ? `#/jornada/${j.id}` : p ? `#/pacientes/${p.id}` : '#/hoje';
+  const link = j ? `#/atendimento/${j.id}` : p ? `#/pacientes/${p.id}` : '#/hoje';
   const atr = atrasada(t.venceEm);
   return `<li class="tarefa${t.feita ? ' feita' : ''}" data-tarefa="${t.id}">
     <input type="checkbox" class="check" ${t.feita ? 'checked' : ''} aria-label="Concluir: ${esc(t.titulo)}">
@@ -440,91 +445,6 @@ function ligarTarefas(el, aoMudar) {
   });
 }
 
-/* ---------------------------------------------------------- tela: Jornada */
-function telaJornada(el) {
-  const ver = new URLSearchParams(location.hash.split('?')[1] || '').get('ver') === 'fechadas' ? 'fechadas' : 'abertas';
-  const d = D();
-  const abertas = d.jornadas.filter((j) => ABERTAS.includes(j.etapa));
-  const fechadas = d.jornadas.filter((j) => !ABERTAS.includes(j.etapa) && diasDesde(j.etapaDesde) <= 90).sort((a, b) => b.etapaDesde.localeCompare(a.etapaDesde));
-
-  el.innerHTML = `
-    <div class="cab">
-      <div><h1>Jornada do paciente</h1><div class="meta">Do primeiro contato ao acompanhamento. Arraste o cartão para a próxima etapa.</div></div>
-      <div class="acoes">
-        <div class="segmentos" role="group" aria-label="Mostrar">
-          <button type="button" data-ver="abertas" aria-pressed="${ver === 'abertas'}">Em andamento<span class="num">${abertas.length}</span></button>
-          <button type="button" data-ver="fechadas" aria-pressed="${ver === 'fechadas'}">Concluídas e perdidas<span class="num">${fechadas.length}</span></button>
-        </div>
-        <button class="btn acento" data-nova-jornada>+ Nova jornada</button>
-      </div>
-    </div>
-    <div id="conteudo-jornada"></div>`;
-  $$('[data-ver]', el).forEach((b) => (b.onclick = () => { location.hash = b.dataset.ver === 'fechadas' ? '#/jornada?ver=fechadas' : '#/jornada'; }));
-  $('[data-nova-jornada]', el).onclick = () => modalNovaJornada();
-  const alvo = $('#conteudo-jornada', el);
-
-  if (ver === 'fechadas') {
-    alvo.innerHTML = fechadas.length === 0 ? '<p class="vazio">Nenhuma jornada fechada nos últimos 90 dias.</p>' : `
-      <div class="tabela-wrap"><table>
-        <thead><tr><th>Paciente</th><th class="esconde-cel">Exame ou consulta</th><th>Resultado</th><th class="esconde-cel">Motivo / valor</th><th class="direita">Quando</th></tr></thead>
-        <tbody>${fechadas.map((j) => { const p = paciente(j.pacienteId); const s = servico(j.servicoId); return `
-          <tr class="clicavel" data-ir="#/jornada/${j.id}">
-            <td><div class="titulo">${esc(p?.nome)}</div></td>
-            <td class="esconde-cel">${esc(s?.nome || '—')}</td>
-            <td><span class="status st-${j.etapa}">${ETAPA_NOME[j.etapa]}</span></td>
-            <td class="esconde-cel">${j.etapa === 'perdido' ? esc(j.motivoPerda || '—') : `<span class="num">${brl(j.valorFinal)}</span>`}</td>
-            <td class="direita num">${dataCurta(j.etapaDesde)}</td>
-          </tr>`; }).join('')}</tbody>
-      </table></div>`;
-    $$('[data-ir]', alvo).forEach((tr) => (tr.onclick = () => { location.hash = tr.dataset.ir; }));
-    return;
-  }
-
-  alvo.innerHTML = `<div class="quadro">${ETAPAS.map((e, i) => {
-    const cards = abertas.filter((j) => j.etapa === e.id).sort((a, b) => a.etapaDesde.localeCompare(b.etapaDesde));
-    const soma = cards.reduce((t, j) => t + saldo(j.orcamento), 0);
-    return `<section class="etapa" data-etapa="${e.id}" aria-label="${e.nome}">
-      <div class="etapa-cab"><span class="passo">${String(i + 1).padStart(2, '0')}</span><b>${e.nome}</b><span class="num">${cards.length}</span>${soma ? `<span class="valor num">${brl(soma)}</span>` : ''}</div>
-      ${cards.map(cartaoJornada).join('') || `<div class="solto">${e.id === 'novo' ? 'Pedidos da Doctoralia aparecem aqui sozinhos. Os de WhatsApp e telefone entram por Nova jornada.' : 'Arraste um cartão para cá.'}</div>`}
-    </section>`;
-  }).join('')}</div>`;
-
-  // Arrastar entre etapas
-  let arrastado = null;
-  $$('.cartao', alvo).forEach((c) => {
-    c.addEventListener('dragstart', (e) => { arrastado = c.dataset.id; c.classList.add('arrastando'); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', arrastado); });
-    c.addEventListener('dragend', () => { c.classList.remove('arrastando'); $$('.etapa', alvo).forEach((x) => x.classList.remove('alvo')); });
-    c.addEventListener('click', () => { location.hash = `#/jornada/${c.dataset.id}`; });
-    c.addEventListener('keydown', (e) => { if (e.key === 'Enter') location.hash = `#/jornada/${c.dataset.id}`; });
-  });
-  $$('.etapa', alvo).forEach((col) => {
-    col.addEventListener('dragover', (e) => { e.preventDefault(); col.classList.add('alvo'); });
-    col.addEventListener('dragleave', (e) => { if (!col.contains(e.relatedTarget)) col.classList.remove('alvo'); });
-    col.addEventListener('drop', (e) => {
-      e.preventDefault(); col.classList.remove('alvo');
-      const id = e.dataTransfer.getData('text/plain') || arrastado;
-      moverEtapa(id, col.dataset.etapa);
-    });
-  });
-}
-function cartaoJornada(j) {
-  const p = paciente(j.pacienteId); const s = servico(j.servicoId);
-  const prox = D().tarefas.filter((t) => t.jornadaId === j.id && !t.feita).sort((a, b) => a.venceEm.localeCompare(b.venceEm))[0];
-  const dias = diasDesde(j.etapaDesde);
-  const regua = Array.from({ length: 7 }, (_, i) => `<i class="${i < Math.min(7, Math.ceil(dias / 3)) ? 'on' : ''}"></i>`).join('');
-  return `<article class="cartao" draggable="true" tabindex="0" data-id="${j.id}" style="view-transition-name:cartao-${esc(j.id)}" aria-label="${esc(p?.nome)}, ${ETAPA_NOME[j.etapa]}">
-    <div style="display:flex;gap:8px;align-items:flex-start;justify-content:space-between">
-      <span class="nome">${esc(p?.nome)}</span>
-      ${j.orcamento ? `<span class="num small" style="color:var(--text-strong)">${saldo(j.orcamento) ? brl(saldo(j.orcamento)) : 'Convênio'}</span>` : ''}
-    </div>
-    ${p?.alerta ? `<span class="alerta-clinico" style="justify-self:start;font-size:11px">${esc(p.alerta)}</span>` : ''}
-    <span class="servico">${s ? `<span class="mono">${esc(s.sigla)}</span> ${esc(s.nome)}` : 'Ainda sem exame definido'}</span>
-    <div class="rodape">
-      <span title="Dias nesta etapa" style="display:flex;gap:6px;align-items:center"><span class="dias-regua${dias > 14 ? ' longo' : ''}" aria-hidden="true">${regua}</span><span class="num">${dias}d</span></span>
-      <span class="${prox && atrasada(prox.venceEm) ? 'atrasada' : ''}" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${prox ? `${atrasada(prox.venceEm) ? 'Atrasada: ' : ''}${esc(prox.titulo)}` : 'Sem próxima tarefa'}</span>
-    </div>
-  </article>`;
-}
 function moverEtapa(id, etapa) {
   const j = jornada(id);
   if (!j || j.etapa === etapa) return;
@@ -544,7 +464,7 @@ function modalNovaJornada(pacienteId) {
   const d = D();
   const pre = pacienteId ? paciente(pacienteId) : null;
   abrirCamada(`
-    <h2>Nova jornada</h2>
+    <h2>Novo contato</h2>
     <form id="f-nj" style="display:grid;gap:12px" novalidate>
       <label class="campo">Paciente <span class="ajuda">Nome de um paciente novo ou já cadastrado.</span>
         <input type="text" name="nome" value="${esc(pre?.nome)}" autocomplete="off" required></label>
@@ -558,7 +478,7 @@ function modalNovaJornada(pacienteId) {
       </div>
       <label class="campo">Anotação<textarea name="nota" rows="2" placeholder="Ex.: trouxe pedido de Holter do clínico geral"></textarea></label>
       <p class="aviso erro" id="nj-erro" hidden></p>
-      <div class="acoes"><button type="button" class="btn fantasma" data-fechar>Cancelar</button><button class="btn acento">Criar jornada</button></div>
+      <div class="acoes"><button type="button" class="btn fantasma" data-fechar>Cancelar</button><button class="btn acento">Registrar contato</button></div>
     </form>`, {
     aoAbrir: (m, fechar) => {
       const f = $('#f-nj', m); let escolhido = pre;
@@ -585,11 +505,11 @@ function modalNovaJornada(pacienteId) {
           d.pacientes.push(p);
         } else if (f.telefone.value.trim()) p.telefone = f.telefone.value.trim();
         const j = { id: db.novoId('j'), pacienteId: p.id, servicoId: f.servico.value || null, etapa: 'novo', pedido: f.pedido.value, criado: agora, etapaDesde: agora,
-          historico: [{ id: db.novoId('h'), tipo: 'sistema', texto: `Jornada criada na recepção (${f.origem.value}).`, em: agora }], orcamento: null, motivoPerda: '', valorFinal: null };
+          historico: [{ id: db.novoId('h'), tipo: 'sistema', texto: `Contato registrado na recepção (${f.origem.value}).`, em: agora }], orcamento: null, motivoPerda: '', valorFinal: null };
         if (f.nota.value.trim()) j.historico.push({ id: db.novoId('h'), tipo: 'nota', texto: f.nota.value.trim(), em: agora });
         d.jornadas.push(j); salvar(); fechar();
-        toast('Jornada criada');
-        location.hash = `#/jornada/${j.id}`;
+        toast('Contato registrado');
+        location.hash = `#/atendimento/${j.id}`;
       };
     },
   });
@@ -599,7 +519,7 @@ function modalNovaJornada(pacienteId) {
 function telaJornadaDetalhe(el, id) {
   const d = D();
   const j = jornada(id);
-  if (!j) { el.innerHTML = `<p class="vazio">Jornada não encontrada. <a class="btn" href="#/jornada">Voltar à jornada</a></p>`; return; }
+  if (!j) { el.innerHTML = `<p class="vazio">Atendimento não encontrado. <a class="btn" href="#/pacientes">Voltar aos pacientes</a></p>`; return; }
   const p = paciente(j.pacienteId);
   const s = servico(j.servicoId);
   const aberta = ABERTAS.includes(j.etapa);
@@ -609,7 +529,7 @@ function telaJornadaDetalhe(el, id) {
   const placeholders = { ligacao: 'Como foi a ligação?', whatsapp: 'O que foi combinado no WhatsApp?', consulta: 'Resumo da consulta: queixa, conduta, exames pedidos', nota: 'O que aconteceu?' };
 
   el.innerHTML = `
-    <a class="voltar" href="#/jornada">← Jornada</a>
+    <a class="voltar" href="#/pacientes/${p?.id}?aba=atendimentos">← ${esc(p?.nome)}</a>
     <div class="cab">
       <div>
         <h1>${esc(p?.nome)}</h1>
@@ -617,6 +537,7 @@ function telaJornadaDetalhe(el, id) {
       </div>
       <div class="acoes">
         ${wa.length >= 10 ? `<a class="btn" data-wa href="https://wa.me/55${wa}?text=${encodeURIComponent(`Olá, ${p.nome.split(' ')[0]}! Aqui é da ${d.settings.nome}.`)}" target="_blank" rel="noopener">Conversar no WhatsApp</a>` : '<button class="btn" disabled title="Paciente sem telefone">Sem telefone</button>'}
+        <a class="btn" href="#/pacientes/${p?.id}">Prontuário</a>
         ${aberta ? `<button class="btn acento" id="agendar-j">Agendar horário</button>` : ''}
         ${aberta ? `
           <select id="mudar-etapa" aria-label="Etapa" style="width:auto">${ETAPAS.map((e) => `<option value="${e.id}" ${e.id === j.etapa ? 'selected' : ''}>${e.nome}</option>`).join('')}</select>
@@ -687,7 +608,7 @@ function telaJornadaDetalhe(el, id) {
             </div>
           </form>
         </div>
-        <button class="btn fantasma perigo" id="excluir" style="margin-top:16px">Excluir jornada</button>
+        <button class="btn fantasma perigo" id="excluir" style="margin-top:16px">Excluir atendimento</button>
       </div>
     </div>`;
 
@@ -745,8 +666,8 @@ function telaJornadaDetalhe(el, id) {
 
   // Fechar / reabrir / excluir
   $('#concluir', el)?.addEventListener('click', () => abrirCamada(`
-    <h2>Concluir jornada</h2>
-    <p class="muted" style="margin:0">O paciente passa para <b>Em acompanhamento</b>. O retorno seguinte vira uma nova jornada.</p>
+    <h2>Concluir atendimento</h2>
+    <p class="muted" style="margin:0">O paciente passa para <b>Em acompanhamento</b>. O retorno seguinte vira um novo atendimento.</p>
     <form id="f-c" style="display:grid;gap:12px">
       <label class="campo">Valor recebido<input type="number" name="valor" min="0" step="10" value="${saldo(j.orcamento) || s?.preco || 0}"></label>
       <label class="opcao"><input type="checkbox" name="retorno" checked><span>Criar tarefa de retorno em 90 dias<span class="muted">Aparece em Hoje quando chegar a data.</span></span></label>
@@ -760,7 +681,7 @@ function telaJornadaDetalhe(el, id) {
       j.historico.push({ id: db.novoId('h'), tipo: 'sistema', texto: `Concluída: em acompanhamento. Recebido ${brl(j.valorFinal)}.`, em: agora });
       if (f.retorno.checked) { const v = new Date(Date.now() + 90 * dia); v.setHours(10, 0, 0, 0); d.tarefas.push({ id: db.novoId('t'), pacienteId: p.id, titulo: `Retorno de 90 dias: ${p.nome.split(' ')[0]}`, venceEm: v.toISOString(), feita: false }); }
       d.tarefas.filter((t) => t.jornadaId === j.id).forEach((t) => (t.feita = true));
-      salvar(); fechar(); render(); toast('Jornada concluída');
+      salvar(); fechar(); render(); toast('Atendimento concluído');
     };
   } }));
   $('#perder', el)?.addEventListener('click', () => abrirCamada(`
@@ -782,28 +703,28 @@ function telaJornadaDetalhe(el, id) {
       j.etapa = 'perdido'; j.etapaDesde = agora; j.motivoPerda = motivo;
       j.historico.push({ id: db.novoId('h'), tipo: 'sistema', texto: `Não seguiu: ${motivo}.`, em: agora });
       d.tarefas.filter((t) => t.jornadaId === j.id).forEach((t) => (t.feita = true));
-      salvar(); fechar(); render(); toast('Jornada marcada como não seguiu');
+      salvar(); fechar(); render(); toast('Atendimento marcado como não seguiu');
     };
   } }));
   $('#reabrir', el)?.addEventListener('click', () => { moverEtapa(j.id, 'retorno'); });
   $('#excluir', el).onclick = () => {
-    if (!confirm(`Excluir a jornada de ${p?.nome}? O histórico dela será apagado. A ficha do paciente continua.`)) return;
+    if (!confirm(`Excluir o atendimento de ${p?.nome}? O histórico dela será apagado. A ficha do paciente continua.`)) return;
     d.jornadas = d.jornadas.filter((x) => x.id !== j.id);
     d.tarefas = d.tarefas.filter((t) => t.jornadaId !== j.id);
     d.agendamentos.forEach((a) => { if (a.jornadaId === j.id) a.jornadaId = null; });
-    salvar(); location.hash = '#/jornada'; toast('Jornada excluída');
+    salvar(); location.hash = `#/pacientes/${p.id}?aba=atendimentos`; toast('Atendimento excluído');
   };
 }
 
 /* ------------------------------------------------------- tela: orçamento impresso */
 function telaOrcamento(el, id) {
   const d = D(); const j = jornada(id);
-  if (!j?.orcamento) { el.innerHTML = '<p class="vazio">Esta jornada ainda não tem orçamento salvo.</p>'; return; }
+  if (!j?.orcamento) { el.innerHTML = '<p class="vazio">Este atendimento ainda não tem orçamento salvo.</p>'; return; }
   const p = paciente(j.pacienteId); const s = servico(j.servicoId); const o = j.orcamento; const st = d.settings;
   const sl = saldo(o);
   el.innerHTML = `
     <div class="nao-imprimir" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;max-width:760px;margin-inline:auto">
-      <a class="voltar" style="margin:0" href="#/jornada/${j.id}">← Voltar à jornada</a>
+      <a class="voltar" style="margin:0" href="#/atendimento/${j.id}">← Voltar ao atendimento</a>
       <button class="btn acento" onclick="window.print()">Imprimir ou salvar PDF</button>
     </div>
     <article class="folha">
@@ -842,52 +763,72 @@ function telaPacientes(el) {
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
         <input type="search" id="q" placeholder="Buscar por nome, telefone ou convênio"></label>
       <div class="segmentos" role="group" aria-label="Filtro">
-        <button type="button" data-f="todos" aria-pressed="true">Todos</button>
-        <button type="button" data-f="alerta" aria-pressed="false">Com alerta</button>
-        <button type="button" data-f="pa" aria-pressed="false">PA fora da meta</button>
+        <button type="button" data-f="todos">Todos</button>
+        <button type="button" data-f="novos">Novos contatos</button>
+        <button type="button" data-f="rascunho">Evolução a assinar</button>
+        <button type="button" data-f="alerta">Com alerta</button>
+        <button type="button" data-f="pa">PA fora da meta</button>
       </div>
     </div>
     <div class="tabela-wrap"><table>
-      <thead><tr><th>Paciente</th><th>Telefone</th><th class="esconde-cel">Convênio</th><th class="esconde-cel">Chegou por</th><th class="esconde-cel">Última PA</th><th class="direita esconde-cel">Jornadas</th></tr></thead>
+      <thead><tr><th>Paciente</th><th>Telefone</th><th class="esconde-cel">Convênio</th><th class="esconde-cel">Chegou por</th><th class="esconde-cel">Última PA</th><th class="esconde-cel">Próximo horário</th></tr></thead>
       <tbody id="tb"></tbody>
     </table></div>`;
-  let filtro = 'todos';
+  let filtro = new URLSearchParams(location.hash.split('?')[1] || '').get('f') || 'todos';
   const desenhar = () => {
+    $$('[data-f]', el).forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.f === filtro)));
     const q = $('#q', el).value.trim().toLowerCase();
     const qd = soDigitos(q);
     const lista = d.pacientes
       .filter((p) => !q || p.nome.toLowerCase().includes(q) || p.convenio.toLowerCase().includes(q) || (qd && soDigitos(p.telefone).includes(qd)))
-      .filter((p) => filtro === 'todos' || (filtro === 'alerta' ? p.alerta : p.medida && paFora(p.medida.pa)))
+      .filter((p) => filtro === 'todos'
+        || (filtro === 'alerta' && p.alerta)
+        || (filtro === 'pa' && p.medida && paFora(p.medida.pa))
+        || (filtro === 'novos' && d.jornadas.some((j) => j.pacienteId === p.id && j.etapa === 'novo'))
+        || (filtro === 'rascunho' && (p.prontuario?.evolucoes || []).some((e) => !e.assinada)))
       .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
     $('#tb', el).innerHTML = lista.length ? lista.map((p) => {
-      const n = d.jornadas.filter((j) => j.pacienteId === p.id).length;
+      const prox = d.agendamentos.filter((a) => a.pacienteId === p.id && new Date(a.inicio) >= inicioDoDia(0) && a.status !== 'faltou').sort((a, b) => a.inicio.localeCompare(b.inicio))[0];
       return `<tr class="clicavel" data-ir="#/pacientes/${p.id}">
         <td><div class="titulo">${esc(p.nome)}</div>${p.alerta ? `<span class="alerta-clinico" style="margin-top:3px;font-size:11px">${esc(p.alerta)}</span>` : `<div class="sub">${idade(p.nascimento) !== null ? `${idade(p.nascimento)} anos` : 'Idade não informada'}</div>`}</td>
         <td class="num">${p.telefone ? esc(p.telefone) : '<span class="atrasada">sem telefone</span>'}</td>
         <td class="esconde-cel">${esc(p.convenio)}</td>
         <td class="esconde-cel">${esc(p.origem)}</td>
         <td class="esconde-cel num">${p.medida ? `<span class="${paFora(p.medida.pa) ? 'atrasada' : ''}">${esc(p.medida.pa)}</span> <span class="faint small">${dataCurta(p.medida.em)}</span>` : '<span class="faint">—</span>'}</td>
-        <td class="direita esconde-cel num">${n}</td>
+        <td class="esconde-cel num">${prox ? `${dataCurta(prox.inicio)} <span class="faint">${hhmm(minutosDoDia(prox.inicio))}</span>` : '<span class="faint">—</span>'}</td>
       </tr>`;
     }).join('') : `<tr><td colspan="6"><div class="vazio" style="border:0">Nenhum paciente com essa busca. <a href="#/pacientes/novo" style="text-decoration:underline">Cadastrar novo paciente</a></div></td></tr>`;
     $$('[data-ir]', el).forEach((tr) => (tr.onclick = () => { location.hash = tr.dataset.ir; }));
   };
   $('#q', el).oninput = desenhar;
-  $$('[data-f]', el).forEach((b) => (b.onclick = () => { filtro = b.dataset.f; $$('[data-f]', el).forEach((x) => x.setAttribute('aria-pressed', String(x === b))); desenhar(); }));
+  $$('[data-f]', el).forEach((b) => (b.onclick = () => { filtro = b.dataset.f; desenhar(); }));
   desenhar();
   $('#q', el).focus();
 }
 
 /* ---------------------------------------------------------- tela: ficha do paciente */
+const ABAS_PAC = [['prontuario', 'Prontuário'], ['cadastro', 'Cadastro'], ['atendimentos', 'Atendimentos e horários']];
+const CIDS = [
+  ['I10', 'Hipertensão essencial'], ['I11.9', 'Cardiopatia hipertensiva'], ['E11', 'Diabetes mellitus tipo 2'], ['E78.5', 'Hiperlipidemia'],
+  ['E66', 'Obesidade'], ['I48', 'Fibrilação e flutter atrial'], ['I49.9', 'Arritmia cardíaca, não especificada'], ['I50.9', 'Insuficiência cardíaca'],
+  ['I20.9', 'Angina pectoris'], ['I25.1', 'Doença aterosclerótica do coração'], ['I35.0', 'Estenose aórtica'], ['R00.2', 'Palpitações'],
+  ['R07.4', 'Dor torácica, não especificada'], ['R55', 'Síncope e colapso'], ['F17.2', 'Tabagismo'], ['Z95.0', 'Portador de marca-passo'],
+  ['Z95.5', 'Presença de stent coronário'], ['Z92.1', 'Uso prolongado de anticoagulante'], ['Z01.8', 'Avaliação pré-operatória'], ['Z00.0', 'Exame médico geral'],
+];
+const EXAMES_LAB = ['Perfil lipídico', 'Hemoglobina glicada', 'Creatinina e potássio', 'BNP', 'INR', 'TSH'];
+const TIPOS_EV = ['Consulta', 'Retorno', 'Teleconsulta', 'Avaliação pré-operatória'];
+const num1 = (n) => (Number.isFinite(n) ? n.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) : '—');
+function imcDe(ex) { const p = Number(ex?.peso); const a = Number(ex?.altura); return p > 0 && a > 0.5 ? p / (a * a) : NaN; }
+const dataHoraLonga = (iso) => `${new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '')}`;
+const prontuarioDe = (p) => (p.prontuario ||= { antecedentes: '', problemas: [], evolucoes: [], anexos: [] });
+
 function telaPaciente(el, id) {
   const d = D();
   const novo = id === 'novo';
-  const p = novo ? { id: db.novoId('p'), nome: '', telefone: '', email: '', nascimento: '', convenio: 'Particular', origem: 'Telefone', riscos: [], medicacoes: '', alergias: '', alerta: '', medida: null, obs: '', criado: new Date().toISOString() } : paciente(id);
+  const p = novo ? { id: db.novoId('p'), nome: '', telefone: '', email: '', nascimento: '', convenio: 'Particular', origem: 'Telefone', riscos: [], medicacoes: '', alergias: '', alerta: '', medida: null, obs: '', criado: new Date().toISOString(), prontuario: { antecedentes: '', problemas: [], evolucoes: [], anexos: [] } } : paciente(id);
   if (!p) { el.innerHTML = `<p class="vazio">Paciente não encontrado. <a class="btn" href="#/pacientes">Voltar aos pacientes</a></p>`; return; }
-  const jornadas = d.jornadas.filter((j) => j.pacienteId === p.id).sort((a, b) => b.criado.localeCompare(a.criado));
-  const tarefas = d.tarefas.filter((t) => !t.feita && (t.pacienteId === p.id || jornadas.some((j) => j.id === t.jornadaId)));
+  const aba = novo ? 'cadastro' : (ABAS_PAC.some(([k]) => k === new URLSearchParams(location.hash.split('?')[1] || '').get('aba')) ? new URLSearchParams(location.hash.split('?')[1]).get('aba') : 'prontuario');
   const id_ = idade(p.nascimento);
-  const imc = null;
 
   el.innerHTML = `
     <a class="voltar" href="#/pacientes">← Pacientes</a>
@@ -896,75 +837,329 @@ function telaPaciente(el, id) {
       <div class="iniciais" aria-hidden="true">${esc(iniciais(p.nome))}</div>
       <div style="flex:1;min-width:220px">
         <h1>${esc(p.nome)}</h1>
-        <div class="meta">${id_ !== null ? `${id_} anos · ` : ''}${esc(p.convenio)} · chegou por ${esc(p.origem)} · paciente desde ${dataCurta(p.criado)}/${new Date(p.criado).getFullYear()}</div>
-        ${p.alerta ? `<div style="margin-top:8px"><span class="alerta-clinico">${esc(p.alerta)}</span></div>` : ''}
+        <div class="meta">${id_ !== null ? `${id_} anos · ` : ''}${esc(p.convenio)}${p.telefone ? ` · <span class="num">${esc(p.telefone)}</span>` : ''} · paciente desde ${dataCurta(p.criado)}/${new Date(p.criado).getFullYear()}</div>
+        ${p.alerta || p.alergias ? `<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">${p.alerta ? `<span class="alerta-clinico">${esc(p.alerta)}</span>` : ''}${p.alergias ? `<span class="alerta-clinico">Alergia: ${esc(p.alergias)}</span>` : ''}</div>` : ''}
       </div>
       <div class="acoes" style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn acento" id="agendar-p">Agendar horário</button>
-        <button class="btn" id="nova-j">+ Nova jornada</button>
+        <button class="btn" id="agendar-p">Agendar horário</button>
+        <button class="btn acento" id="nova-ev">Nova evolução</button>
       </div>
     </div>
-    <div class="sinais" style="margin-bottom:24px">
+    <div class="sinais" style="margin-bottom:22px">
       <div><span>PA</span><b class="${p.medida && paFora(p.medida.pa) ? 'fora' : ''}">${p.medida ? esc(p.medida.pa) : '—'}</b><em>mmHg</em></div>
       <div><span>FC</span><b>${p.medida?.fc ? `<span data-conta="${Number(p.medida.fc)}">${esc(p.medida.fc)}</span>` : '—'}</b><em>bpm</em></div>
       <div><span>Medida em</span><b>${p.medida ? dataCurta(p.medida.em) : '—'}</b><em>${p.medida ? tempoAtras(p.medida.em) : 'sem registro'}</em></div>
-      <div><span>Riscos</span><b>${p.riscos.length}</b><em>${p.riscos.length ? esc(p.riscos.slice(0, 2).join(', ')) + (p.riscos.length > 2 ? '…' : '') : 'nenhum marcado'}</em></div>
+      <div><span>Problemas</span><b>${prontuarioDe(p).problemas.length}</b><em>${prontuarioDe(p).problemas.length ? esc(prontuarioDe(p).problemas.slice(0, 2).map((x) => x.cid).join(' · ')) : 'nenhum registrado'}</em></div>
       <div class="ecg" style="--dur-varre:${(5 * 60 / (Number(p.medida?.fc) || 75)).toFixed(2)}s" title="Traço ilustrativo no ritmo da última FC">${svgECG(400, 48, 32, 80, 1.5)}</div>
-    </div>`}
-    <div class="detalhe">
-      <form id="f-pac" novalidate>
-        <div class="bloco">
-          <h3>Dados do paciente</h3><p class="muted">Usados para confirmar consultas e mandar orientações de preparo.</p>
-          <div class="form-grade">
-            <label class="campo inteiro">Nome completo<input type="text" name="nome" value="${esc(p.nome)}" required></label>
-            <label class="campo">Telefone (WhatsApp)<input type="tel" name="telefone" value="${esc(p.telefone)}" placeholder="(41) 99999-0000"></label>
-            <label class="campo">E-mail<input type="email" name="email" value="${esc(p.email)}"></label>
-            <label class="campo">Nascimento<input type="date" name="nascimento" value="${esc(p.nascimento)}"></label>
-            <label class="campo">Convênio<select name="convenio">${CONVENIOS.map((c) => `<option ${c === p.convenio ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
-            <label class="campo">Como chegou<select name="origem">${ORIGENS.map((o) => `<option ${o === p.origem ? 'selected' : ''}>${o}</option>`).join('')}</select></label>
-          </div>
-        </div>
-        <div class="bloco">
-          <h3>Coração em resumo</h3><p class="muted">Para a recepção saber o essencial antes de ligar ou remarcar. O prontuário completo fica com a médica.</p>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px" role="group" aria-label="Fatores de risco">
-            ${RISCOS.map((r) => `<button type="button" class="chip" data-risco="${esc(r)}" aria-pressed="${p.riscos.includes(r)}">${esc(r)}</button>`).join('')}
-          </div>
-          <div class="form-grade">
-            <label class="campo inteiro">Alerta clínico <span class="ajuda">Aparece em vermelho em todas as telas. Ex.: anticoagulado, marca-passo, stent recente.</span><input type="text" name="alerta" value="${esc(p.alerta)}"></label>
-            <label class="campo">Última PA (mmHg)<input type="text" name="pa" inputmode="numeric" value="${esc(p.medida?.pa)}" placeholder="120/80"></label>
-            <label class="campo">Última FC (bpm)<input type="number" name="fc" min="20" max="250" value="${esc(p.medida?.fc)}"></label>
-            <label class="campo inteiro">Remédios em uso<textarea name="medicacoes" rows="2">${esc(p.medicacoes)}</textarea></label>
-            <label class="campo">Alergias<input type="text" name="alergias" value="${esc(p.alergias)}"></label>
-            <label class="campo">Observações da recepção<input type="text" name="obs" value="${esc(p.obs)}" placeholder="Ex.: prefere ligação à tarde"></label>
-          </div>
-        </div>
-        ${novo ? '<button class="btn acento">Cadastrar paciente</button>' : `
-        <div class="bloco"><h3>Dados pessoais (LGPD)</h3><p class="muted">O paciente pode pedir a exclusão dos dados. Apaga a ficha, as jornadas e as tarefas dele.</p>
-          <button type="button" class="btn perigo" id="excluir-p">Excluir paciente e dados</button></div>`}
-        <div class="barra-salvar" id="barra-salvar" hidden><span>Alterações não salvas</span><button type="button" class="btn fantasma" id="descartar">Descartar</button><button class="btn acento">Salvar ficha</button></div>
-      </form>
-      ${novo ? '<div></div>' : `
-      <div>
-        ${(() => { const hs = d.agendamentos.filter((a) => a.pacienteId === p.id).sort((a, b) => b.inicio.localeCompare(a.inicio)).slice(0, 5); return `
-        <div class="painel">
-          <h3>Horários <span class="num faint" style="font-weight:400">${hs.length}</span></h3>
-          ${hs.length ? `<ul class="lista" style="border:0">${hs.map((a) => `<li><a class="linha" href="#/?dia=${chaveDia(a.inicio)}"><span class="hora-ag num">${dataCurta(a.inicio)}<small>${hhmm(minutosDoDia(a.inicio))}</small></span><span class="corpo"><span class="titulo">${esc(servico(a.servicoId)?.nome || '')}</span><span class="sub">${esc(recurso(a.recurso)?.nome || '')}</span></span><span class="status-ag ag-${a.status}"><i></i>${STATUS_AG[a.status]}</span></a></li>`).join('')}</ul>` : '<p class="small muted" style="margin:0">Nenhum horário marcado.</p>'}
-        </div>`; })()}
-        <div class="painel">
-          <h3>Jornadas <span class="num faint" style="font-weight:400">${jornadas.length}</span></h3>
-          ${jornadas.length ? `<ul class="lista" style="border-bottom:0">${jornadas.map((j) => { const s = servico(j.servicoId); return `
-            <li><a class="linha" href="#/jornada/${j.id}">
-              <span class="sigla">${esc(s?.sigla || '—')}</span>
-              <span class="corpo"><span class="titulo">${esc(s?.nome || j.pedido)}</span><span class="sub">${dataCurta(j.criado)} · ${ETAPA_NOME[j.etapa]}</span></span>
-              <span class="seta">→</span></a></li>`; }).join('')}</ul>` : '<p class="small muted" style="margin:0">Nenhuma jornada ainda.</p>'}
-        </div>
-        <div class="painel">
-          <h3>Tarefas abertas <span class="num faint" style="font-weight:400">${tarefas.length}</span></h3>
-          ${tarefas.length ? `<ul class="lista" style="border:0">${tarefas.map((t) => linhaTarefa(t, false)).join('')}</ul>` : '<p class="small muted" style="margin:0">Nada pendente com este paciente.</p>'}
-        </div>
-      </div>`}
+    </div>
+    <nav class="abas-pac" aria-label="Seções da ficha">
+      ${ABAS_PAC.map(([k, nome]) => `<a href="#/pacientes/${p.id}${k === 'prontuario' ? '' : `?aba=${k}`}"${k === aba ? ' aria-current="page"' : ''}>${nome}${k === 'prontuario' && prontuarioDe(p).evolucoes.some((e) => !e.assinada) ? ' <i class="ponto-rasc" title="Evolução sem assinatura"></i>' : ''}</a>`).join('')}
+    </nav>`}
+    <div id="conteudo-pac"></div>`;
+
+  const alvo = $('#conteudo-pac', el);
+  if (aba === 'prontuario') renderProntuario(alvo, p);
+  else if (aba === 'atendimentos') renderAtendimentos(alvo, p);
+  else renderCadastro(alvo, p, novo);
+
+  $('#agendar-p', el)?.addEventListener('click', () => modalAgendamento({ pacienteId: p.id }));
+  $('#nova-ev', el)?.addEventListener('click', () => {
+    novaEvolucao(p);
+    if (aba !== 'prontuario') location.hash = `#/pacientes/${p.id}`; else render();
+    requestAnimationFrame(() => $('#f-ev textarea, #f-ev input')?.focus());
+  });
+}
+
+function novaEvolucao(p, extra = {}) {
+  const pr = prontuarioDe(p);
+  const aberta = pr.evolucoes.find((e) => !e.assinada);
+  if (aberta) return aberta;
+  const ultima = [...pr.evolucoes].filter((e) => e.assinada).sort((a, b) => b.em.localeCompare(a.em))[0];
+  const ev = { id: db.novoId('e'), em: new Date().toISOString(), tipo: ultima ? 'Retorno' : 'Consulta', autor: D().settings.medico, queixa: '', anamnese: '',
+    exame: { altura: ultima?.exame?.altura || '' }, ausculta: '', hipoteses: ultima ? [...ultima.hipoteses] : [], conduta: '',
+    prescricao: ultima ? ultima.prescricao.map((x) => ({ ...x })) : [], exames: [], assinada: false, adendos: [], ...extra };
+  pr.evolucoes.push(ev); salvar();
+  return ev;
+}
+
+/* ------------------------------------------------------------------ prontuário */
+function renderProntuario(el, p) {
+  const pr = prontuarioDe(p);
+  const evs = [...pr.evolucoes].sort((a, b) => b.em.localeCompare(a.em));
+  const rasc = evs.find((e) => !e.assinada);
+  const assinadas = evs.filter((e) => e.assinada);
+  const ultimaPresc = assinadas[0]?.prescricao || [];
+  el.innerHTML = `
+    <div class="prontuario">
+      <div class="pr-main">
+        ${rasc ? editorEvolucao(rasc, p) : `
+        <button type="button" class="nova-ev-area" id="nova-ev-area">
+          <span class="mais" aria-hidden="true">+</span>
+          <span><b>Registrar evolução</b><small>Queixa, exame físico, hipóteses, conduta e prescrição. A última prescrição já vem preenchida.</small></span>
+        </button>`}
+        <h2 class="secao" style="margin-top:28px">Evoluções <span class="num">${assinadas.length}</span></h2>
+        ${assinadas.length ? `<div class="linha-tempo">${assinadas.map((e, i) => cartaoEvolucao(e, p, i === 0)).join('')}</div>` : '<p class="vazio">Nenhuma evolução assinada ainda. A primeira consulta aparece aqui depois de assinada.</p>'}
+      </div>
+      <aside class="pr-lado">
+        <section class="painel">
+          <h3>Problemas ativos <span class="num faint" style="font-weight:400">${pr.problemas.length}</span></h3>
+          ${pr.problemas.length ? `<ul class="problemas">${pr.problemas.map((x, i) => `<li><span class="cid">${esc(x.cid)}</span><span class="pb-nome">${esc(x.nome)}${x.desde ? `<small>desde ${esc(x.desde)}</small>` : ''}</span><button type="button" class="icone-btn sm" data-tirar-pb="${i}" aria-label="Retirar ${esc(x.nome)}" title="Marcar como resolvido">×</button></li>`).join('')}</ul>` : '<p class="small muted" style="margin:0 0 10px">Nenhum problema registrado.</p>'}
+          <select id="add-pb" aria-label="Adicionar problema" class="sel-sm"><option value="">+ Adicionar problema (CID-10)</option>${CIDS.filter(([c]) => !pr.problemas.some((x) => x.cid === c)).map(([c, n]) => `<option value="${c}">${c} · ${esc(n)}</option>`).join('')}</select>
+        </section>
+        ${graficoPA(p)}
+        <section class="painel">
+          <h3>Medicações em uso</h3>
+          ${ultimaPresc.length ? `<ul class="meds">${ultimaPresc.map((m) => `<li><b>${esc(m.med)}</b><span>${esc(m.pos)}</span></li>`).join('')}</ul><p class="small faint" style="margin:8px 0 0">Da última prescrição assinada (${dataCurta(assinadas[0].em)}).</p>` : `<p class="small muted" style="margin:0">${esc(p.medicacoes || 'Nenhuma registrada.')}</p>`}
+        </section>
+        <section class="painel">
+          <h3>Antecedentes e alergias</h3>
+          <label class="campo">Antecedentes<textarea id="antecedentes" rows="3" placeholder="Pessoais e familiares, hábitos, cirurgias">${esc(pr.antecedentes)}</textarea></label>
+          <label class="campo" style="margin-top:10px">Alergias<input type="text" id="alergias-pr" value="${esc(p.alergias)}" placeholder="Nenhuma conhecida"></label>
+        </section>
+        <section class="painel">
+          <h3>Anexos <span class="num faint" style="font-weight:400">${pr.anexos.length}</span></h3>
+          ${pr.anexos.length ? `<ul class="anexos">${[...pr.anexos].sort((a, b) => b.em.localeCompare(a.em)).map((a) => `<li><span class="arq" aria-hidden="true">${a.nome.toLowerCase().endsWith('.pdf') ? 'PDF' : 'IMG'}</span><span class="corpo"><b>${esc(a.nome)}</b><small>${esc(a.tipo)} · ${dataCurta(a.em)} · ${esc(a.tamanho)}</small></span><button type="button" class="icone-btn sm" data-tirar-ax="${a.id}" aria-label="Remover ${esc(a.nome)}">×</button></li>`).join('')}</ul>` : '<p class="small muted" style="margin:0 0 10px">Nenhum laudo ou exame anexado.</p>'}
+          <label class="btn sm anexar">Anexar laudo ou exame<input type="file" id="arquivo" accept=".pdf,image/*" hidden></label>
+          <p class="small faint" style="margin:8px 0 0">Na demonstração, só o nome do arquivo fica guardado.</p>
+        </section>
+      </aside>
     </div>`;
 
+  $('#nova-ev-area', el)?.addEventListener('click', () => { novaEvolucao(p); render(); requestAnimationFrame(() => $('#f-ev input[name=queixa]')?.focus()); });
+  if (rasc) ligarEditor(el, rasc, p);
+  ligarCartoes(el, p);
+  $('#add-pb', el).onchange = (e) => {
+    const c = CIDS.find(([k]) => k === e.target.value); if (!c) return;
+    pr.problemas.push({ cid: c[0], nome: c[1], desde: String(new Date().getFullYear()) }); salvar(); render(); toast(`${c[0]} adicionado aos problemas`);
+  };
+  $$('[data-tirar-pb]', el).forEach((b) => (b.onclick = () => {
+    const i = Number(b.dataset.tirarPb); const [x] = pr.problemas.splice(i, 1); salvar(); render();
+    toast(`${x.cid} marcado como resolvido`, { desfazer: () => { pr.problemas.splice(i, 0, x); salvar(); render(); } });
+  }));
+  $('#antecedentes', el).onchange = (e) => { pr.antecedentes = e.target.value.trim(); salvar(); toast('Antecedentes salvos'); };
+  $('#alergias-pr', el).onchange = (e) => { p.alergias = e.target.value.trim(); salvar(); render(); toast('Alergias salvas'); };
+  $('#arquivo', el).onchange = (e) => {
+    const f = e.target.files?.[0]; if (!f) return;
+    const kb = f.size / 1024;
+    pr.anexos.push({ id: db.novoId('x'), nome: f.name, tipo: /laudo/i.test(f.name) ? 'Laudo' : 'Exame', em: new Date().toISOString(), tamanho: kb > 1024 ? `${num1(kb / 1024)} MB` : `${Math.max(1, Math.round(kb))} KB` });
+    salvar(); render(); toast('Arquivo anexado ao prontuário');
+  };
+  $$('[data-tirar-ax]', el).forEach((b) => (b.onclick = () => {
+    const i = pr.anexos.findIndex((a) => a.id === b.dataset.tirarAx); const [x] = pr.anexos.splice(i, 1); salvar(); render();
+    toast('Anexo removido', { desfazer: () => { pr.anexos.splice(i, 0, x); salvar(); render(); } });
+  }));
+}
+
+function vitaisTexto(ex) {
+  const imc = imcDe(ex);
+  return [ex.pa && `PA <b class="${paFora(ex.pa) ? 'fora' : ''}">${esc(ex.pa)}</b>`, ex.fc && `FC <b>${esc(ex.fc)}</b>`, ex.peso && `Peso <b>${num1(Number(ex.peso))} kg</b>`,
+    Number.isFinite(imc) && `IMC <b>${num1(imc)}</b>`, ex.sat && `SatO₂ <b>${esc(ex.sat)}%</b>`].filter(Boolean).join('<i></i>');
+}
+
+function cartaoEvolucao(e, p, aberta) {
+  const med = D().settings;
+  return `<details class="evolucao" data-ev="${e.id}"${aberta ? ' open' : ''}>
+    <summary>
+      <span class="ev-data num">${dataHoraLonga(e.em)}<small>${hora(e.em)}</small></span>
+      <span class="ev-resumo"><b>${esc(e.tipo)}</b><span>${esc(e.queixa || e.hipoteses.map((h) => h.nome).join(', ') || 'Sem queixa registrada')}</span></span>
+      <span class="ev-ok" title="Assinada em ${dataCurta(e.assinadaEm || e.em)} às ${hora(e.assinadaEm || e.em)}">Assinada</span>
+    </summary>
+    <div class="ev-corpo">
+      ${vitaisTexto(e.exame) ? `<p class="vitais">${vitaisTexto(e.exame)}</p>` : ''}
+      ${e.anamnese ? `<div class="ev-bloco"><span class="rotulo">História</span><p>${esc(e.anamnese)}</p></div>` : ''}
+      ${e.ausculta ? `<div class="ev-bloco"><span class="rotulo">Exame cardiovascular</span><p>${esc(e.ausculta)}</p></div>` : ''}
+      ${e.hipoteses.length ? `<div class="ev-bloco"><span class="rotulo">Hipóteses diagnósticas</span><p class="cids">${e.hipoteses.map((h) => `<span class="cid-chip"><span class="cid">${esc(h.cid)}</span>${esc(h.nome)}</span>`).join('')}</p></div>` : ''}
+      ${e.conduta ? `<div class="ev-bloco"><span class="rotulo">Conduta</span><p>${esc(e.conduta)}</p></div>` : ''}
+      ${e.prescricao.length ? `<div class="ev-bloco"><span class="rotulo">Prescrição</span><ol class="presc-lista">${e.prescricao.map((m) => `<li><b>${esc(m.med)}</b> — ${esc(m.pos)}</li>`).join('')}</ol></div>` : ''}
+      ${e.exames.length ? `<div class="ev-bloco"><span class="rotulo">Exames solicitados</span><p class="cids">${e.exames.map((x) => `<span class="chip">${esc(x)}</span>`).join('')}</p></div>` : ''}
+      ${e.adendos.length ? `<div class="ev-bloco adendos"><span class="rotulo">Adendos</span>${e.adendos.map((a) => `<p><span class="num faint">${dataCurta(a.em)} ${hora(a.em)}</span> ${esc(a.texto)}</p>`).join('')}</div>` : ''}
+      <footer class="ev-rodape">
+        <span class="assinatura">Assinado por ${esc(e.autor)}${e.autor === med.medico ? ` · ${esc(med.registro.split('·')[0].trim())}` : ''}</span>
+        <span class="ev-acoes">
+          ${e.prescricao.length ? `<a class="btn sm" href="#/receita/${p.id}/${e.id}">Imprimir receita</a>` : ''}
+          <button type="button" class="btn sm" data-adendo="${e.id}">Adendo</button>
+        </span>
+      </footer>
+    </div>
+  </details>`;
+}
+
+function ligarCartoes(el, p) {
+  $$('[data-adendo]', el).forEach((b) => (b.onclick = () => {
+    const e = prontuarioDe(p).evolucoes.find((x) => x.id === b.dataset.adendo);
+    abrirCamada(`
+      <h2>Adendo à evolução</h2>
+      <p class="muted" style="margin:0">Evoluções assinadas não mudam. O adendo fica registrado com data, hora e autor, abaixo do texto original.</p>
+      <form id="f-ad" style="display:grid;gap:12px"><textarea name="texto" rows="4" placeholder="Ex.: resultado do ecocardiograma chegou: FE 58%, sem alterações." required></textarea>
+      <div class="acoes"><button type="button" class="btn fantasma" data-fechar>Cancelar</button><button class="btn acento">Registrar adendo</button></div></form>`, {
+      aoAbrir: (m, fechar) => {
+        $('[data-fechar]', m).onclick = fechar; $('textarea', m).focus();
+        $('#f-ad', m).onsubmit = (ev) => {
+          ev.preventDefault(); const t = ev.target.texto.value.trim(); if (!t) return;
+          e.adendos.push({ texto: t, em: new Date().toISOString(), autor: D().settings.medico }); salvar(); fechar(); render(); toast('Adendo registrado');
+        };
+      },
+    });
+  }));
+}
+
+function editorEvolucao(e, p) {
+  const ex = e.exame || {};
+  const exames = [...D().servicos.filter((s) => s.categoria === 'Exame' && s.status !== 'arquivado').map((s) => s.nome), ...EXAMES_LAB];
+  return `
+  <form class="editor-ev" id="f-ev" novalidate>
+    <header class="editor-cab">
+      <span class="rasc-selo">Rascunho</span>
+      <b>Evolução de ${esc(dataHoraLonga(e.em))}</b>
+      <select name="tipo" aria-label="Tipo de atendimento" class="sel-sm">${TIPOS_EV.map((t) => `<option ${t === e.tipo ? 'selected' : ''}>${t}</option>`).join('')}</select>
+      <span class="salvo small faint" id="salvo">Salvo automaticamente</span>
+    </header>
+    <div class="editor-corpo">
+      <label class="campo">Queixa principal<input type="text" name="queixa" value="${esc(e.queixa)}" placeholder="Ex.: palpitações à noite há 2 meses"></label>
+      <label class="campo">História da doença atual<textarea name="anamnese" rows="3" placeholder="Início, frequência, fatores de piora e melhora, sintomas associados, adesão ao tratamento">${esc(e.anamnese)}</textarea></label>
+      <fieldset class="exame-fisico">
+        <legend class="rotulo">Exame físico</legend>
+        <label class="campo">PA (mmHg)<input type="text" name="pa" inputmode="numeric" value="${esc(ex.pa || '')}" placeholder="120/80"></label>
+        <label class="campo">FC (bpm)<input type="number" name="fc" value="${esc(ex.fc || '')}"></label>
+        <label class="campo">Peso (kg)<input type="number" step="0.1" name="peso" value="${esc(ex.peso || '')}"></label>
+        <label class="campo">Altura (m)<input type="number" step="0.01" name="altura" value="${esc(ex.altura || '')}"></label>
+        <label class="campo">SatO₂ (%)<input type="number" name="sat" value="${esc(ex.sat || '')}"></label>
+        <div class="campo imc"><span>IMC</span><b class="num" id="imc">—</b><small id="imc-txt"></small></div>
+      </fieldset>
+      <label class="campo">Exame cardiovascular<textarea name="ausculta" rows="2" placeholder="Ritmo, bulhas, sopros, pulsos, edema, ausculta pulmonar">${esc(e.ausculta)}</textarea></label>
+      <div class="campo">
+        <span>Hipóteses diagnósticas (CID-10)</span>
+        <div class="cids" id="hip">${e.hipoteses.map((h, i) => `<span class="cid-chip"><span class="cid">${esc(h.cid)}</span>${esc(h.nome)}<button type="button" data-tirar-hip="${i}" aria-label="Tirar ${esc(h.nome)}">×</button></span>`).join('')}</div>
+        <select id="add-hip" class="sel-sm" aria-label="Adicionar hipótese"><option value="">+ Adicionar hipótese</option>${CIDS.filter(([c]) => !e.hipoteses.some((h) => h.cid === c)).map(([c, n]) => `<option value="${c}">${c} · ${esc(n)}</option>`).join('')}</select>
+      </div>
+      <label class="campo">Conduta<textarea name="conduta" rows="3" placeholder="Ajustes de medicação, orientações, encaminhamentos, retorno">${esc(e.conduta)}</textarea></label>
+      <div class="campo">
+        <span>Prescrição</span>
+        <div class="presc" id="presc">${e.prescricao.map((m, i) => `
+          <div class="presc-linha" data-i="${i}"><span class="num presc-n">${i + 1}</span><input type="text" data-campo="med" value="${esc(m.med)}" placeholder="Remédio e dose" aria-label="Remédio ${i + 1}"><input type="text" data-campo="pos" value="${esc(m.pos)}" placeholder="Como tomar" aria-label="Posologia ${i + 1}"><button type="button" class="icone-btn sm" data-tirar-med="${i}" aria-label="Tirar remédio ${i + 1}">×</button></div>`).join('') || '<p class="small muted" style="margin:0">Sem remédios nesta evolução.</p>'}</div>
+        <button type="button" class="btn sm" id="add-med" style="justify-self:start">+ Adicionar remédio</button>
+      </div>
+      <div class="campo">
+        <span>Exames solicitados</span>
+        <div class="cids">${exames.map((x) => `<button type="button" class="chip" data-exame="${esc(x)}" aria-pressed="${e.exames.includes(x)}">${esc(x)}</button>`).join('')}</div>
+      </div>
+    </div>
+    <footer class="editor-rodape">
+      <button type="button" class="btn fantasma perigo" id="descartar-ev">Descartar rascunho</button>
+      <span class="small faint">Depois de assinada, a evolução não muda: só recebe adendos.</span>
+      <button class="btn acento" id="assinar">Assinar evolução</button>
+    </footer>
+  </form>`;
+}
+
+function ligarEditor(el, e, p) {
+  const f = $('#f-ev', el);
+  const pr = prontuarioDe(p);
+  let t = null;
+  const atualizarImc = () => {
+    const v = imcDe({ peso: f.peso.value, altura: f.altura.value });
+    $('#imc', el).textContent = Number.isFinite(v) ? num1(v) : '—';
+    $('#imc-txt', el).textContent = !Number.isFinite(v) ? '' : v < 18.5 ? 'baixo peso' : v < 25 ? 'normal' : v < 30 ? 'sobrepeso' : 'obesidade';
+  };
+  const ler = () => {
+    Object.assign(e, { tipo: f.tipo.value, queixa: f.queixa.value.trim(), anamnese: f.anamnese.value.trim(), ausculta: f.ausculta.value.trim(), conduta: f.conduta.value.trim() });
+    e.exame = { pa: f.pa.value.replace(/\s/g, ''), fc: f.fc.value, peso: f.peso.value, altura: f.altura.value, sat: f.sat.value };
+    e.prescricao = $$('.presc-linha', f).map((l) => ({ med: $('[data-campo=med]', l).value.trim(), pos: $('[data-campo=pos]', l).value.trim() }));
+  };
+  const guardar = () => {
+    clearTimeout(t);
+    t = setTimeout(() => { ler(); salvar(); const s = $('#salvo', el); if (s) { s.textContent = `Salvo às ${hora(new Date().toISOString())}`; s.classList.remove('pisca'); void s.offsetWidth; s.classList.add('pisca'); } }, 450);
+  };
+  f.addEventListener('input', () => { atualizarImc(); guardar(); });
+  f.addEventListener('change', guardar);
+  atualizarImc();
+  $('#add-hip', el).onchange = (ev) => { const c = CIDS.find(([k]) => k === ev.target.value); if (!c) return; ler(); e.hipoteses.push({ cid: c[0], nome: c[1] }); salvar(); render(); };
+  $$('[data-tirar-hip]', el).forEach((b) => (b.onclick = () => { ler(); e.hipoteses.splice(Number(b.dataset.tirarHip), 1); salvar(); render(); }));
+  $('#add-med', el).onclick = () => { ler(); e.prescricao.push({ med: '', pos: '' }); salvar(); render(); requestAnimationFrame(() => { const l = $$('#presc [data-campo=med]'); l[l.length - 1]?.focus(); }); };
+  $$('[data-tirar-med]', el).forEach((b) => (b.onclick = () => { ler(); e.prescricao.splice(Number(b.dataset.tirarMed), 1); salvar(); render(); }));
+  $$('[data-exame]', el).forEach((b) => (b.onclick = () => {
+    const x = b.dataset.exame; e.exames = e.exames.includes(x) ? e.exames.filter((y) => y !== x) : [...e.exames, x];
+    b.setAttribute('aria-pressed', String(e.exames.includes(x))); salvar();
+  }));
+  $('#descartar-ev', el).onclick = () => {
+    if (!confirm('Descartar este rascunho de evolução? O que foi escrito será apagado.')) return;
+    clearTimeout(t); pr.evolucoes = pr.evolucoes.filter((x) => x.id !== e.id); salvar(); render(); toast('Rascunho descartado');
+  };
+  f.onsubmit = (ev) => {
+    ev.preventDefault(); clearTimeout(t); ler();
+    if (!e.queixa && !e.anamnese && !e.conduta) { toast('Escreva ao menos a queixa, a história ou a conduta antes de assinar.', { erro: true }); f.queixa.focus(); return; }
+    if (e.exame.pa && !/^\d{2,3}\/\d{2,3}$/.test(e.exame.pa)) { f.pa.classList.add('invalido'); f.pa.focus(); toast('Escreva a PA como 120/80.', { erro: true }); return; }
+    e.prescricao = e.prescricao.filter((m) => m.med);
+    if (!confirm(`Assinar a evolução como ${D().settings.medico}? Depois de assinada ela não pode ser editada, só receber adendos.`)) return;
+    e.assinada = true; e.assinadaEm = new Date().toISOString();
+    if (e.exame.pa) p.medida = { pa: e.exame.pa, fc: Number(e.exame.fc) || null, em: e.assinadaEm };
+    if (e.prescricao.length) p.medicacoes = e.prescricao.map((m) => m.med).join(', ');
+    let extra = '';
+    const ag = e.agendamentoId && D().agendamentos.find((a) => a.id === e.agendamentoId);
+    if (ag && ag.status === 'em-atendimento') { ag.status = 'finalizado'; extra = ' e atendimento finalizado na agenda'; }
+    salvar(); render(); toast(`Evolução assinada${extra}`);
+  };
+}
+
+function graficoPA(p) {
+  const pts = prontuarioDe(p).evolucoes.filter((e) => e.assinada && /^\d{2,3}\/\d{2,3}$/.test(e.exame?.pa || ''))
+    .map((e) => ({ em: e.em, s: Number(e.exame.pa.split('/')[0]), d: Number(e.exame.pa.split('/')[1]) }))
+    .sort((a, b) => a.em.localeCompare(b.em)).slice(-8);
+  if (pts.length < 2) return '';
+  const W = 280; const H = 120; const min = 50; const max = 180;
+  const x = (i) => 18 + (i * (W - 36)) / (pts.length - 1);
+  const y = (v) => H - 14 - ((Math.min(max, Math.max(min, v)) - min) / (max - min)) * (H - 28);
+  const linha = (k) => pts.map((pt, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(pt[k]).toFixed(1)}`).join(' ');
+  const ult = pts[pts.length - 1];
+  return `<section class="painel">
+    <h3>Pressão nas consultas <span class="num faint" style="font-weight:400;margin-left:auto">${ult.s}/${ult.d}</span></h3>
+    <svg class="grafico-pa" viewBox="0 0 ${W} ${H}" role="img" aria-label="Pressão arterial nas últimas ${pts.length} consultas. Última: ${ult.s} por ${ult.d}.">
+      <rect x="0" y="${y(130)}" width="${W}" height="${y(80) - y(130)}" class="meta-faixa"/>
+      <line x1="0" x2="${W}" y1="${y(130)}" y2="${y(130)}" class="meta-linha"/><text x="${W - 2}" y="${y(130) - 4}" text-anchor="end" class="meta-txt">meta 130/80</text>
+      <path d="${linha('s')}" class="pa-s"/><path d="${linha('d')}" class="pa-d"/>
+      ${pts.map((pt, i) => `<circle cx="${x(i)}" cy="${y(pt.s)}" r="3.2" class="pt-s${pt.s >= 140 ? ' fora' : ''}"><title>${dataCurta(pt.em)}: ${pt.s}/${pt.d}</title></circle><circle cx="${x(i)}" cy="${y(pt.d)}" r="2.6" class="pt-d"/>`).join('')}
+    </svg>
+    <p class="legenda-pa small faint"><span><i class="ls"></i>Sistólica</span><span><i class="ld"></i>Diastólica</span><span>${dataCurta(pts[0].em)} a ${dataCurta(ult.em)}</span></p>
+  </section>`;
+}
+
+/* --------------------------------------------------------------- aba: cadastro */
+function renderCadastro(el, p, novo) {
+  const d = D();
+  const temProntuario = !novo && prontuarioDe(p).evolucoes.some((e) => e.assinada);
+  el.innerHTML = `
+    <form id="f-pac" novalidate style="max-width:820px">
+      <div class="bloco">
+        <h3>Dados do paciente</h3><p class="muted">Usados para confirmar consultas e mandar orientações de preparo.</p>
+        <div class="form-grade">
+          <label class="campo inteiro">Nome completo<input type="text" name="nome" value="${esc(p.nome)}" required></label>
+          <label class="campo">Telefone (WhatsApp)<input type="tel" name="telefone" value="${esc(p.telefone)}" placeholder="(41) 99999-0000"></label>
+          <label class="campo">E-mail<input type="email" name="email" value="${esc(p.email)}"></label>
+          <label class="campo">Nascimento<input type="date" name="nascimento" value="${esc(p.nascimento)}"></label>
+          <label class="campo">Convênio<select name="convenio">${CONVENIOS.map((c) => `<option ${c === p.convenio ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
+          <label class="campo">Como chegou<select name="origem">${ORIGENS.map((o) => `<option ${o === p.origem ? 'selected' : ''}>${o}</option>`).join('')}</select></label>
+          <label class="campo">Observações da recepção<input type="text" name="obs" value="${esc(p.obs)}" placeholder="Ex.: prefere ligação à tarde"></label>
+        </div>
+      </div>
+      <div class="bloco">
+        <h3>Para a recepção</h3><p class="muted">O essencial para ligar, confirmar ou remarcar. O detalhe clínico fica no prontuário.</p>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px" role="group" aria-label="Fatores de risco">
+          ${RISCOS.map((r) => `<button type="button" class="chip" data-risco="${esc(r)}" aria-pressed="${p.riscos.includes(r)}">${esc(r)}</button>`).join('')}
+        </div>
+        <div class="form-grade">
+          <label class="campo inteiro">Alerta clínico <span class="ajuda">Aparece em vermelho em todas as telas. Ex.: anticoagulado, marca-passo, stent recente.</span><input type="text" name="alerta" value="${esc(p.alerta)}"></label>
+          <label class="campo">Alergias<input type="text" name="alergias" value="${esc(p.alergias)}"></label>
+          <label class="campo">Remédios em uso<input type="text" name="medicacoes" value="${esc(p.medicacoes)}"></label>
+        </div>
+      </div>
+      ${novo ? '<button class="btn acento">Cadastrar paciente</button>' : temProntuario ? `
+      <div class="bloco"><h3>Dados pessoais (LGPD)</h3>
+        <p class="muted">Este paciente tem prontuário. Pela Lei nº 13.787/2018, o prontuário é guardado por no mínimo 20 anos a partir do último registro, por isso a ficha não pode ser excluída. Se o paciente pedir, dá para apagar só os dados de contato.</p>
+        <button type="button" class="btn perigo" id="apagar-contato">Apagar telefone e e-mail</button></div>` : `
+      <div class="bloco"><h3>Dados pessoais (LGPD)</h3><p class="muted">Sem prontuário assinado: o paciente pode pedir a exclusão completa. Apaga a ficha, os atendimentos, os horários e as tarefas dele.</p>
+        <button type="button" class="btn perigo" id="excluir-p">Excluir paciente e dados</button></div>`}
+      <div class="barra-salvar" id="barra-salvar" hidden><span>Alterações não salvas</span><button type="button" class="btn fantasma" id="descartar">Descartar</button><button class="btn acento">Salvar ficha</button></div>
+    </form>`;
   const f = $('#f-pac', el);
   let riscos = [...p.riscos];
   const sujo = () => { if (!novo) { $('#barra-salvar', el).hidden = false; saindoComAlteracoes = true; } };
@@ -977,21 +1172,19 @@ function telaPaciente(el, id) {
   f.onsubmit = (e) => {
     e.preventDefault();
     if (!f.nome.value.trim()) { f.nome.classList.add('invalido'); f.nome.focus(); toast('Informe o nome do paciente.', { erro: true }); return; }
-    if (f.pa.value.trim() && !/^\d{2,3}\s*\/\s*\d{2,3}$/.test(f.pa.value.trim())) { f.pa.classList.add('invalido'); f.pa.focus(); toast('Escreva a PA como 120/80.', { erro: true }); return; }
-    const antesPA = p.medida?.pa; const antesFC = String(p.medida?.fc ?? '');
     Object.assign(p, { nome: f.nome.value.trim(), telefone: f.telefone.value.trim(), email: f.email.value.trim(), nascimento: f.nascimento.value, convenio: f.convenio.value, origem: f.origem.value,
       alerta: f.alerta.value.trim(), medicacoes: f.medicacoes.value.trim(), alergias: f.alergias.value.trim(), obs: f.obs.value.trim(), riscos });
-    const pa = f.pa.value.replace(/\s/g, '');
-    if (pa && (pa !== antesPA || f.fc.value !== antesFC)) p.medida = { pa, fc: Number(f.fc.value) || null, em: new Date().toISOString() };
     if (novo) d.pacientes.push(p);
     saindoComAlteracoes = null; salvar();
     toast(novo ? 'Paciente cadastrado' : 'Ficha salva');
     if (novo) location.hash = `#/pacientes/${p.id}`; else render();
   };
-  $('#nova-j', el)?.addEventListener('click', () => modalNovaJornada(p.id));
-  $('#agendar-p', el)?.addEventListener('click', () => modalAgendamento({ pacienteId: p.id }));
+  $('#apagar-contato', el)?.addEventListener('click', () => {
+    if (!confirm(`Apagar telefone e e-mail de ${p.nome}? O prontuário continua guardado.`)) return;
+    p.telefone = ''; p.email = ''; salvar(); render(); toast('Dados de contato apagados');
+  });
   $('#excluir-p', el)?.addEventListener('click', () => {
-    if (!confirm(`Excluir ${p.nome} e todos os dados dele (ficha, jornadas e tarefas)? Não dá para desfazer.`)) return;
+    if (!confirm(`Excluir ${p.nome} e todos os dados dele (ficha, atendimentos, horários e tarefas)? Não dá para desfazer.`)) return;
     const js = d.jornadas.filter((j) => j.pacienteId === p.id).map((j) => j.id);
     d.pacientes = d.pacientes.filter((x) => x.id !== p.id);
     d.jornadas = d.jornadas.filter((j) => j.pacienteId !== p.id);
@@ -999,9 +1192,64 @@ function telaPaciente(el, id) {
     d.agendamentos = d.agendamentos.filter((a) => a.pacienteId !== p.id);
     saindoComAlteracoes = null; salvar(); location.hash = '#/pacientes'; toast('Paciente e dados excluídos');
   });
-  ligarTarefas(el, render);
   if (novo) f.nome.focus();
-  void imc;
+}
+
+/* ------------------------------------------------------ aba: atendimentos e horários */
+function renderAtendimentos(el, p) {
+  const d = D();
+  const atend = d.jornadas.filter((j) => j.pacienteId === p.id).sort((a, b) => b.criado.localeCompare(a.criado));
+  const tarefas = d.tarefas.filter((t) => !t.feita && (t.pacienteId === p.id || atend.some((j) => j.id === t.jornadaId)));
+  const hs = d.agendamentos.filter((a) => a.pacienteId === p.id).sort((a, b) => b.inicio.localeCompare(a.inicio));
+  el.innerHTML = `
+    <div class="detalhe">
+      <div>
+        <h2 class="secao">Horários <span class="num">${hs.length}</span><button type="button" class="btn sm" id="ag-p2" style="margin-left:auto">Agendar horário</button></h2>
+        ${hs.length ? `<ul class="lista">${hs.map((a) => `<li><a class="linha" href="#/?dia=${chaveDia(a.inicio)}"><span class="hora-ag num">${dataCurta(a.inicio)}<small>${hhmm(minutosDoDia(a.inicio))}</small></span><span class="corpo"><span class="titulo">${esc(servico(a.servicoId)?.nome || '')}</span><span class="sub">${esc(recurso(a.recurso)?.nome || '')}${a.obs ? ` · ${esc(a.obs)}` : ''}</span></span><span class="status-ag ag-${a.status}"><i></i>${STATUS_AG[a.status]}</span></a></li>`).join('')}</ul>` : '<p class="vazio">Nenhum horário marcado.</p>'}
+      </div>
+      <div>
+        <div class="painel">
+          <h3>Atendimentos <span class="num faint" style="font-weight:400">${atend.length}</span><button type="button" class="btn sm" id="novo-at" style="margin-left:auto">+ Novo</button></h3>
+          <p class="small muted" style="margin:-6px 0 10px">Cada atendimento guarda o contato, o orçamento, o histórico de ligações e os próximos passos.</p>
+          ${atend.length ? `<ul class="lista" style="border-bottom:0">${atend.map((j) => { const s = servico(j.servicoId); return `
+            <li><a class="linha" href="#/atendimento/${j.id}">
+              <span class="sigla">${esc(s?.sigla || '—')}</span>
+              <span class="corpo"><span class="titulo">${esc(s?.nome || j.pedido)}</span><span class="sub">${dataCurta(j.criado)} · ${ETAPA_NOME[j.etapa]}${j.orcamento ? ` · ${brl(saldo(j.orcamento))}` : ''}</span></span>
+              <span class="seta">→</span></a></li>`; }).join('')}</ul>` : '<p class="small muted" style="margin:0">Nenhum atendimento ainda.</p>'}
+        </div>
+        <div class="painel">
+          <h3>Tarefas abertas <span class="num faint" style="font-weight:400">${tarefas.length}</span></h3>
+          ${tarefas.length ? `<ul class="lista" style="border:0">${tarefas.map((t) => linhaTarefa(t, false)).join('')}</ul>` : '<p class="small muted" style="margin:0">Nada pendente com este paciente.</p>'}
+        </div>
+      </div>
+    </div>`;
+  $('#ag-p2', el).onclick = () => modalAgendamento({ pacienteId: p.id });
+  $('#novo-at', el).onclick = () => modalNovaJornada(p.id);
+  ligarTarefas(el, render);
+}
+
+/* ------------------------------------------------------------ receita impressa */
+function telaReceita(el, pid, eid) {
+  const p = paciente(pid); const e = p && prontuarioDe(p).evolucoes.find((x) => x.id === eid); const st = D().settings;
+  if (!e || !e.prescricao.length) { el.innerHTML = '<p class="vazio">Receita não encontrada.</p>'; return; }
+  el.innerHTML = `
+    <div class="nao-imprimir" style="display:flex;justify-content:space-between;align-items:center;max-width:760px;margin:0 auto 16px">
+      <a class="voltar" style="margin:0" href="#/pacientes/${p.id}">← Prontuário de ${esc(p.nome)}</a>
+      <button class="btn acento" onclick="window.print()">Imprimir ou salvar PDF</button>
+    </div>
+    <article class="folha receita">
+      <header>
+        <div><h1>${esc(st.nome)}</h1><div class="small muted">${esc(st.medico)} · ${esc(st.registro)}</div></div>
+        <div class="small muted" style="text-align:right">${esc(st.endereco)}<br>${esc(st.cidade)} · ${esc(st.telefone)}</div>
+      </header>
+      ${svgECG(680, 26, 16, 170, 0.9, 'ecg-folha')}
+      <p class="rotulo">Receituário</p>
+      <p style="margin:6px 0 22px">Paciente: <b>${esc(p.nome)}</b>${idade(p.nascimento) !== null ? ` · ${idade(p.nascimento)} anos` : ''}</p>
+      <p class="rotulo" style="margin-bottom:8px">Uso oral</p>
+      <ol class="receita-lista">${e.prescricao.map((m) => `<li><b>${esc(m.med)}</b><span>${esc(m.pos)}</span></li>`).join('')}</ol>
+      <div class="assinatura-folha"><span></span>${esc(e.autor)}<br><small>${esc(st.registro)}</small></div>
+      <footer>${esc(st.cidade)}, ${dataLonga(e.assinadaEm || e.em)}. Receita emitida a partir da evolução assinada no prontuário.</footer>
+    </article>`;
 }
 
 /* ------------------------------------------------------- tela: Exames e consultas */
@@ -1065,11 +1313,11 @@ function telaServico(el, id) {
     <a class="voltar" href="#/servicos">← Exames e consultas</a>
     <div class="cab">
       <div><h1>${novo ? 'Novo exame ou consulta' : esc(s.nome)}</h1>
-      <div class="meta">${novo ? 'Comece pelo nome e pelo preço particular.' : `<span class="mono">${esc(s.sigla)}</span> · ${STATUS_SERV[s.status]} · ${plural(procura, 'paciente em jornada', 'pacientes em jornada')}`}</div></div>
+      <div class="meta">${novo ? 'Comece pelo nome e pelo preço particular.' : `<span class="mono">${esc(s.sigla)}</span> · ${STATUS_SERV[s.status]} · ${plural(procura, 'paciente em atendimento', 'pacientes em atendimento')}`}</div></div>
     </div>
     <div class="detalhe">
       <form id="f-s" novalidate>
-        <div class="bloco"><h3>Cadastro</h3><p class="muted">A sigla aparece nos cartões da jornada e nas pendências.</p>
+        <div class="bloco"><h3>Cadastro</h3><p class="muted">A sigla aparece na agenda e nas pendências.</p>
           <div class="form-grade">
             <label class="campo inteiro">Nome<input type="text" name="nome" value="${esc(s.nome)}" placeholder="Ex.: Holter 24 horas" required></label>
             <label class="campo">Sigla<input type="text" name="sigla" value="${esc(s.sigla)}" maxlength="10" style="text-transform:uppercase;font-family:var(--font-mono)" placeholder="HOLTER"></label>
@@ -1097,7 +1345,7 @@ function telaServico(el, id) {
         </div>
         ${novo ? '' : `<div class="painel"><h3>Neste mês</h3>
           <div class="par"><span>Realizados</span><b>${s.realizadosMes}</b></div>
-          <div class="par"><span>Em jornada agora</span><b>${procura}</b></div>
+          <div class="par"><span>Em atendimento agora</span><b>${procura}</b></div>
           <div class="par"><span>Faturamento particular estimado</span><b>${brl(s.realizadosMes * s.preco)}</b></div></div>`}
       </div>
     </div>`;
@@ -1121,7 +1369,7 @@ function telaServico(el, id) {
   };
   $('#arquivar', el)?.addEventListener('click', () => {
     if (s.status === 'arquivado') {
-      if (!confirm(`Excluir ${s.nome} de vez? Jornadas que citam este exame ficam sem exame definido.`)) return;
+      if (!confirm(`Excluir ${s.nome} de vez? Atendimentos que citam este exame ficam sem exame definido.`)) return;
       d.servicos = d.servicos.filter((x) => x.id !== s.id);
       d.jornadas.forEach((j) => { if (j.servicoId === s.id) j.servicoId = null; });
       saindoComAlteracoes = null; salvar(); location.hash = '#/servicos'; toast('Excluído');
@@ -1144,7 +1392,7 @@ function telaDivulgacao(el) {
     <p class="aviso info" style="margin:0 0 24px">Publicidade médica segue a Resolução CFM nº 2.336/2023: sem promessa de resultado, sem antes e depois e sempre com CRM e RQE da responsável (<b>${esc(d.settings.medico)} · ${esc(d.settings.registro)}</b>).</p>
     <div class="bloco">
       <h3 style="display:flex;align-items:center;gap:10px">Doctoralia ${dv.doctoralia ? '<span class="status st-acompanhamento">Conectada</span>' : '<span class="status st-nao">Não conectada</span>'}</h3>
-      <p class="muted">Publique os exames com preço e preparo no perfil da médica. Os pedidos de lá entram sozinhos na Jornada.</p>
+      <p class="muted">Publique os exames com preço e preparo no perfil da médica. Os pedidos de lá entram sozinhos como novos contatos.</p>
       ${dv.doctoralia ? `
         <div class="tabela-wrap"><table><thead><tr><th>Exame ou consulta</th><th class="direita esconde-cel">Preço</th><th>Na Doctoralia</th><th class="direita"></th></tr></thead><tbody>
         ${ativos.map((s) => { const st = dv.perfis[s.id] || 'nao'; return `<tr>
@@ -1157,7 +1405,7 @@ function telaDivulgacao(el) {
     </div>
     <div class="bloco">
       <h3>Perfil da Empresa no Google</h3>
-      <p class="muted">Cole este link no botão "Agendar" do perfil no Google Maps. Quem clica abre o WhatsApp do consultório com a mensagem pronta. Ao criar a jornada, marque "Google" em Como chegou.</p>
+      <p class="muted">Cole este link no botão "Agendar" do perfil no Google Maps. Quem clica abre o WhatsApp do consultório com a mensagem pronta. Ao registrar o contato, marque "Google" em Como chegou.</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;max-width:560px"><input type="text" readonly value="${esc(link)}" id="link-ag" class="mono" style="flex:1;min-width:220px;font-size:13px" aria-label="Link do WhatsApp para o Google"><button class="btn" id="copiar">Copiar link</button></div>
     </div>`;
   $('#conectar', el)?.addEventListener('click', (e) => {
@@ -1436,8 +1684,9 @@ function abrirHorario(id) {
       <div class="gaveta-acoes">
         ${a.status === 'agendado' && wa.length >= 10 ? `<a class="btn acento" id="g-wa" href="https://wa.me/55${wa}?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener">Confirmar por WhatsApp</a>` : ''}
         ${proximo ? `<button class="btn ${a.status === 'agendado' && wa.length >= 10 ? '' : 'acento'}" id="g-prox">${proximo[1]}</button>` : ''}
+        ${['na-recepcao', 'em-atendimento', 'finalizado'].includes(a.status) && p ? `<a class="btn" href="#/pacientes/${p.id}" data-fecha-gaveta>Abrir prontuário</a>` : ''}
         ${a.status === 'finalizado' ? '<p class="small muted" style="margin:0">Atendimento finalizado.</p>' : ''}
-        ${a.status === 'faltou' ? '<p class="small muted" style="margin:0">Paciente faltou. Remarque abaixo ou registre na jornada.</p>' : ''}
+        ${a.status === 'faltou' ? '<p class="small muted" style="margin:0">Paciente faltou. Remarque abaixo ou registre no atendimento.</p>' : ''}
       </div>
       <details class="remarcar"${a.status === 'faltou' ? ' open' : ''}>
         <summary>Remarcar</summary>
@@ -1448,7 +1697,7 @@ function abrirHorario(id) {
         </form>
       </details>
       <label class="campo" style="margin-top:16px">Observação do horário<textarea id="g-obs" rows="2" placeholder="Ex.: vem acompanhado da filha">${esc(a.obs)}</textarea></label>
-      ${a.jornadaId && jornada(a.jornadaId) ? `<a class="linha-link" href="#/jornada/${a.jornadaId}">Ver a jornada deste paciente <span>→</span></a>` : ''}
+      ${a.jornadaId && jornada(a.jornadaId) ? `<a class="linha-link" href="#/atendimento/${a.jornadaId}">Ver o atendimento (orçamento e histórico) <span>→</span></a>` : ''}
     </div>
     <div class="gaveta-rodape">
       ${!['finalizado', 'faltou'].includes(a.status) ? '<button class="btn fantasma" id="g-faltou">Faltou</button>' : ''}
@@ -1457,8 +1706,14 @@ function abrirHorario(id) {
     classe: 'gaveta',
     aoAbrir: (m, fechar) => {
       $('[data-fechar]', m).onclick = fechar;
+      $$('[data-fecha-gaveta], .link-sub, .linha-link', m).forEach((l) => l.addEventListener('click', fechar));
       const mudar = (status, texto) => {
         const antes = a.status; a.status = status; salvar();
+        // Consulta começando: abre um rascunho de evolução no prontuário, ligado a este horário
+        if (status === 'em-atendimento' && p && ['Consulta', 'Check-up'].includes(s?.categoria)) {
+          novaEvolucao(p, { agendamentoId: a.id, tipo: s.id === 's7' ? 'Avaliação pré-operatória' : prontuarioDe(p).evolucoes.some((e) => e.assinada) ? 'Retorno' : 'Consulta' });
+          texto += '. Rascunho de evolução aberto no prontuário';
+        }
         if (a.jornadaId && status === 'finalizado') {
           const j = jornada(a.jornadaId);
           j?.historico.push({ id: db.novoId('h'), tipo: 'consulta', texto: `Atendimento realizado (agenda): ${s?.nome || ''}.`, em: new Date().toISOString() });
@@ -1582,7 +1837,7 @@ function abrirBusca() {
   if ($('.paleta')) return;
   const acoes = [
     ['Novo agendamento', () => modalAgendamento({})], ['Abrir a agenda de hoje', '#/'], ['Resumo do dia', '#/hoje'],
-    ['Abrir a jornada do paciente', '#/jornada'], ['Nova jornada', () => modalNovaJornada()], ['Cadastrar paciente', '#/pacientes/novo'],
+    ['Registrar novo contato', () => modalNovaJornada()], ['Cadastrar paciente', '#/pacientes/novo'],
     ['Cadastrar exame ou consulta', '#/servicos/novo'], ['Divulgação (Doctoralia e Google)', '#/divulgacao'], ['Dados do consultório', '#/consultorio'],
   ];
   abrirCamada(`

@@ -42,3 +42,4 @@ Sensação: precisa, calma, cara.
 - Escalonamento de linhas por CSS (`--i`): listas e tabelas
 - Barra de tempo por transform scaleX: toast com desfazer
 - Agenda (tema clínico claro): gaveta lateral desliza da direita (`gaveta-entra`/`gaveta-sai`); blocos viajam ao remarcar ou mudar status (View Transitions, `view-transition-name: ag-<id>`); fantasma tracejado mostra o horário durante o arrasto; linha do "agora" desliza a cada 30 s; barra da seção ativa no menu lateral cresce ao entrar.
+- Prontuário: editor de evolução assenta ao abrir; "Salvo às hh:mm" pisca em acento a cada salvamento automático; cartões de evolução abrem com o corpo assentando; gráfico da PA desenha as linhas (stroke-dashoffset) ao chegar na ficha; linha da aba ativa da ficha cresce do centro.

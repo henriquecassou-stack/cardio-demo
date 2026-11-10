@@ -1,7 +1,7 @@
 // Dados de exemplo da demonstração. Tudo fica só neste navegador (localStorage).
 // As datas são relativas a hoje, para a demonstração parecer sempre "do dia".
 
-const CHAVE = 'ritmo-cardio-demo-v3';
+const CHAVE = 'ritmo-cardio-demo-v4';
 
 function quando(dias, h = 9, m = 0) {
   const d = new Date();
@@ -59,6 +59,67 @@ function semente() {
     P('p17', 'Ricardo Ogliari', '(41) 99923-6604', { nascimento: '1964-09-01', convenio: 'Particular', origem: 'Google', riscos: ['Tabagismo'], criado: quando(-50) }),
     P('p18', 'Juliana Prado Hoffmann', '(41) 99780-1145', { nascimento: '1986-12-22', convenio: 'Bradesco Saúde', origem: 'Indicação de paciente', criado: quando(-70) }),
   ];
+
+  // Prontuário: evoluções assinadas, lista de problemas (CID-10), antecedentes e anexos
+  const MED = 'Dra. Helena Maranhão';
+  const EV = (dias, h, tipo, x) => ({
+    id: uid('e'), em: quando(dias, h), tipo, autor: MED, queixa: '', anamnese: '', exame: {}, ausculta: '', hipoteses: [], conduta: '',
+    prescricao: [], exames: [], assinada: true, assinadaEm: quando(dias, h + 1), adendos: [], ...x,
+  });
+  const PR = {
+    p1: {
+      antecedentes: 'Mãe com IAM aos 62 anos. Ex-tabagista (parou em 2010). Sedentária.',
+      problemas: [{ cid: 'I10', nome: 'Hipertensão essencial', desde: '2016' }, { cid: 'E11', nome: 'Diabetes mellitus tipo 2', desde: '2019' }],
+      evolucoes: [
+        EV(-120, 9, 'Consulta', { queixa: 'Controle de pressão e cansaço aos médios esforços.', anamnese: 'Refere adesão irregular à losartana (esquece a dose da noite). Nega dor torácica, síncope ou dispneia paroxística noturna.', exame: { pa: '146/90', fc: 76, peso: 78, altura: 1.6, sat: 97 }, ausculta: 'Ritmo regular em 2 tempos, bulhas normofonéticas, sem sopros. MV presente sem ruídos adventícios.', hipoteses: [{ cid: 'I10', nome: 'Hipertensão essencial' }, { cid: 'E11', nome: 'Diabetes mellitus tipo 2' }], conduta: 'Reforçada adesão. Mantida losartana 50 mg 12/12 h. Orientada dieta com menos sal e caminhada 30 min, 5x/semana.', prescricao: [{ med: 'Losartana potássica 50 mg', pos: '1 comprimido de 12 em 12 horas' }], exames: ['Perfil lipídico', 'Hemoglobina glicada', 'Creatinina e potássio'] }),
+        EV(-34, 9, 'Retorno', { queixa: 'Retorno com exames. Piora da pressão em casa (média 150/95).', anamnese: 'Exames: HbA1c 7,4%, LDL 128, creatinina 0,9. Edema discreto de tornozelos no fim do dia.', exame: { pa: '152/94', fc: 78, peso: 79, altura: 1.6, sat: 97 }, ausculta: 'Ritmo regular, sem sopros. Edema +/4+ em membros inferiores.', hipoteses: [{ cid: 'I10', nome: 'Hipertensão essencial' }, { cid: 'E78.5', nome: 'Hiperlipidemia não especificada' }], conduta: 'Associado anlodipino 5 mg. Iniciada atorvastatina 20 mg. Solicitado ecocardiograma para avaliar hipertrofia. Retorno em 30 dias com MRPA.', prescricao: [{ med: 'Losartana potássica 50 mg', pos: '1 comprimido de 12 em 12 horas' }, { med: 'Anlodipino 5 mg', pos: '1 comprimido pela manhã' }, { med: 'Atorvastatina 20 mg', pos: '1 comprimido à noite' }], exames: ['Ecocardiograma transtorácico'] }),
+      ],
+      anexos: [{ id: uid('x'), nome: 'Exames laboratoriais.pdf', tipo: 'Exame', em: quando(-36), tamanho: '312 KB' }, { id: uid('x'), nome: 'ECG de repouso.pdf', tipo: 'Laudo', em: quando(-120), tamanho: '188 KB' }],
+    },
+    p2: {
+      antecedentes: 'Fibrilação atrial permanente desde 2019. CHA₂DS₂-VASc 3. Alergia a dipirona (urticária).',
+      problemas: [{ cid: 'I48', nome: 'Fibrilação e flutter atrial', desde: '2019' }, { cid: 'I10', nome: 'Hipertensão essencial', desde: '2012' }, { cid: 'Z92.1', nome: 'Uso prolongado de anticoagulante', desde: '2019' }],
+      evolucoes: [
+        EV(-100, 10, 'Consulta', { queixa: 'Controle de anticoagulação.', anamnese: 'INR das últimas 3 medidas entre 2,1 e 2,8. Sem sangramentos. Palpitações ocasionais.', exame: { pa: '134/82', fc: 72, peso: 84, altura: 1.74, sat: 96 }, ausculta: 'Ritmo irregular, bulhas normofonéticas, sem sopros.', hipoteses: [{ cid: 'I48', nome: 'Fibrilação e flutter atrial' }], conduta: 'Mantida varfarina conforme INR. Mantido bisoprolol. Holter para avaliar controle de frequência.', prescricao: [{ med: 'Varfarina sódica 5 mg', pos: 'Conforme tabela de INR' }, { med: 'Bisoprolol 5 mg', pos: '1 comprimido pela manhã' }], exames: ['Holter 24 horas', 'INR mensal'] }),
+        EV(-12, 9, 'Retorno', { queixa: 'Retorno com Holter.', anamnese: 'Holter: FA com FC média 74 bpm, máxima 118 bpm em esforço. Sem pausas significativas.', exame: { pa: '128/80', fc: 64, peso: 83, altura: 1.74, sat: 97 }, ausculta: 'Ritmo irregular, sem sopros.', hipoteses: [{ cid: 'I48', nome: 'Fibrilação e flutter atrial' }], conduta: 'Frequência controlada. Mantida conduta. Retorno em 3 meses com INR e função renal.', prescricao: [{ med: 'Varfarina sódica 5 mg', pos: 'Conforme tabela de INR' }, { med: 'Bisoprolol 5 mg', pos: '1 comprimido pela manhã' }], exames: ['INR', 'Creatinina'] }),
+      ],
+      anexos: [{ id: uid('x'), nome: 'Holter 24h.pdf', tipo: 'Laudo', em: quando(-20), tamanho: '1,4 MB' }],
+    },
+    p9: {
+      antecedentes: 'Insuficiência cardíaca de etiologia isquêmica. IAM em 2017 com angioplastia. Ex-tabagista.',
+      problemas: [{ cid: 'I50.9', nome: 'Insuficiência cardíaca', desde: '2018' }, { cid: 'I25.1', nome: 'Doença aterosclerótica do coração', desde: '2017' }, { cid: 'I10', nome: 'Hipertensão essencial', desde: '2005' }],
+      evolucoes: [
+        EV(-45, 10, 'Consulta', { queixa: 'Dispneia aos médios esforços e ganho de 2 kg em uma semana.', anamnese: 'Classe funcional NYHA II-III. Refere ortopneia leve (2 travesseiros). Boa adesão.', exame: { pa: '112/70', fc: 72, peso: 81, altura: 1.7, sat: 94 }, ausculta: 'B3 presente. Estertores finos em bases.', hipoteses: [{ cid: 'I50.9', nome: 'Insuficiência cardíaca' }], conduta: 'Aumentada furosemida para 40 mg. Orientado controle diário de peso e restrição hídrica de 1,5 L. Retorno em 30 dias.', prescricao: [{ med: 'Sacubitril/valsartana 49/51 mg', pos: '1 comprimido de 12 em 12 horas' }, { med: 'Espironolactona 25 mg', pos: '1 comprimido pela manhã' }, { med: 'Furosemida 40 mg', pos: '1 comprimido pela manhã' }], exames: ['BNP', 'Creatinina e potássio'] }),
+        EV(-15, 10, 'Retorno', { queixa: 'Melhora da falta de ar.', anamnese: 'Perdeu 2,5 kg. Dorme com 1 travesseiro. BNP 410 (antes 780). K 4,8.', exame: { pa: '108/68', fc: 66, peso: 78.5, altura: 1.7, sat: 96 }, ausculta: 'Sem B3. Pulmões limpos.', hipoteses: [{ cid: 'I50.9', nome: 'Insuficiência cardíaca' }], conduta: 'Compensado. Mantida medicação. Retorno em 15 dias com peso anotado.', prescricao: [{ med: 'Sacubitril/valsartana 49/51 mg', pos: '1 comprimido de 12 em 12 horas' }, { med: 'Espironolactona 25 mg', pos: '1 comprimido pela manhã' }, { med: 'Furosemida 40 mg', pos: '1 comprimido pela manhã' }], exames: [] }),
+      ],
+      anexos: [{ id: uid('x'), nome: 'Ecocardiograma (FE 32%).pdf', tipo: 'Laudo', em: quando(-60), tamanho: '820 KB' }, { id: uid('x'), nome: 'BNP e função renal.pdf', tipo: 'Exame', em: quando(-16), tamanho: '240 KB' }],
+    },
+    p12: {
+      antecedentes: 'Angioplastia com stent farmacológico em artéria descendente anterior (2024).',
+      problemas: [{ cid: 'I25.1', nome: 'Doença aterosclerótica do coração', desde: '2024' }, { cid: 'Z95.5', nome: 'Presença de stent coronário', desde: '2024' }, { cid: 'E78.5', nome: 'Hiperlipidemia', desde: '2015' }],
+      evolucoes: [EV(-60, 9, 'Retorno', { queixa: 'Acompanhamento pós-angioplastia.', anamnese: 'Assintomática. Caminha 40 min diários. LDL 62.', exame: { pa: '124/76', fc: 58, peso: 63, altura: 1.58, sat: 98 }, ausculta: 'Ritmo regular, sem sopros.', hipoteses: [{ cid: 'I25.1', nome: 'Doença aterosclerótica do coração' }], conduta: 'Mantida dupla antiagregação até completar 12 meses do stent. Meta de LDL atingida.', prescricao: [{ med: 'AAS 100 mg', pos: '1 comprimido após o almoço' }, { med: 'Clopidogrel 75 mg', pos: '1 comprimido ao dia' }, { med: 'Rosuvastatina 20 mg', pos: '1 comprimido à noite' }, { med: 'Metoprolol 50 mg', pos: '1 comprimido de 12 em 12 horas' }], exames: ['Teste ergométrico'] })],
+      anexos: [],
+    },
+    p4: {
+      antecedentes: 'Tabagista (20 maços-ano). Pai com revascularização aos 55 anos.',
+      problemas: [{ cid: 'R07.4', nome: 'Dor torácica, não especificada', desde: '2026' }, { cid: 'E78.5', nome: 'Hiperlipidemia', desde: '2022' }, { cid: 'F17.2', nome: 'Tabagismo', desde: '' }],
+      evolucoes: [EV(-12, 15, 'Consulta', { queixa: 'Dor no peito em aperto, às vezes ao subir escada, melhora em repouso.', anamnese: 'Episódios há 1 mês, duração de 2 a 5 minutos. Sem irradiação. Nega síncope.', exame: { pa: '138/88', fc: 71, peso: 92, altura: 1.78, sat: 97 }, ausculta: 'Ritmo regular, sem sopros.', hipoteses: [{ cid: 'R07.4', nome: 'Dor torácica, não especificada' }], conduta: 'Solicitado teste ergométrico. Orientado procurar emergência se dor em repouso ou > 20 min. Iniciado AAS. Encaminhado a programa de cessação do tabagismo.', prescricao: [{ med: 'AAS 100 mg', pos: '1 comprimido após o almoço' }, { med: 'Rosuvastatina 10 mg', pos: '1 comprimido à noite' }], exames: ['Teste ergométrico', 'Perfil lipídico'] })],
+      anexos: [],
+    },
+    p11: {
+      antecedentes: 'Sem acompanhamento prévio. Pai hipertenso.',
+      problemas: [{ cid: 'I10', nome: 'Hipertensão essencial', desde: '2026' }, { cid: 'E66', nome: 'Obesidade', desde: '' }],
+      evolucoes: [EV(-8, 16, 'Consulta', { queixa: 'Pressão alta na farmácia (170/105).', anamnese: 'Cefaleia occipital matinal. Ronco intenso. Sem medicação.', exame: { pa: '162/100', fc: 84, peso: 104, altura: 1.76, sat: 96 }, ausculta: 'Ritmo regular, sem sopros.', hipoteses: [{ cid: 'I10', nome: 'Hipertensão essencial' }, { cid: 'E66', nome: 'Obesidade' }], conduta: 'Iniciada losartana + hidroclorotiazida. MAPA para confirmar. Investigar apneia do sono.', prescricao: [{ med: 'Losartana 50 mg + hidroclorotiazida 12,5 mg', pos: '1 comprimido pela manhã' }], exames: ['MAPA 24 horas', 'Creatinina, potássio, glicemia e perfil lipídico'] })],
+      anexos: [],
+    },
+    p5: {
+      antecedentes: 'Bloqueio atrioventricular total com implante de marca-passo DDD em 2021.',
+      problemas: [{ cid: 'Z95.0', nome: 'Portador de marca-passo', desde: '2021' }, { cid: 'I10', nome: 'Hipertensão essencial', desde: '2010' }],
+      evolucoes: [EV(-95, 9, 'Retorno', { queixa: 'Revisão anual.', anamnese: 'Avaliação do marca-passo em 08/2026 sem intercorrências, bateria com 6 anos estimados.', exame: { pa: '146/90', fc: 60, peso: 70, altura: 1.62, sat: 97 }, ausculta: 'Ritmo regular, sem sopros.', hipoteses: [{ cid: 'Z95.0', nome: 'Portador de marca-passo' }, { cid: 'I10', nome: 'Hipertensão essencial' }], conduta: 'PA acima da meta: aumentado anlodipino para 10 mg. Retorno em 3 meses.', prescricao: [{ med: 'Anlodipino 10 mg', pos: '1 comprimido pela manhã' }], exames: [] })],
+      anexos: [{ id: uid('x'), nome: 'Avaliação do marca-passo.pdf', tipo: 'Laudo', em: quando(-110), tamanho: '540 KB' }],
+    },
+  };
+  pacientes.forEach((p) => { p.prontuario = PR[p.id] || { antecedentes: '', problemas: [], evolucoes: [], anexos: [] }; });
 
   const H = (tipo, texto, dias, h = 10, m = 0) => ({ id: uid('h'), tipo, texto, em: quando(dias, h, m) });
   const J = (id, pacienteId, servicoId, etapa, pedido, criado, desde, historico = [], extra = {}) => ({
