@@ -150,7 +150,6 @@ h2.secao .link:hover { color: var(--text-strong); }
 .grade-home { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 40px; margin-top: 36px; }
 .grade-home > *, .detalhe > * { min-width: 0; }
 .coluna { display: grid; grid-template-columns: minmax(0, 1fr); gap: 36px; align-content: start; }
-.detalhe.vitrine-grade { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
 .folha .ecg-folha, .tela-entrada .ecg-fundo { display: block; width: 100%; }
 .segmentos { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
 .segmentos button { flex: none; }
@@ -307,24 +306,6 @@ input.invalido { border-color: var(--alert); }
 .dias-regua i.on { background: var(--text-faint); }
 .dias-regua.longo i.on { background: var(--alert); }
 
-/* ----------------------------------------------------------------- vitrine */
-.vagas { display: grid; grid-template-columns: 1.4fr 1fr 1fr; grid-auto-rows: 132px; gap: 10px; }
-.vaga { border: 1px solid var(--border-strong); border-radius: var(--radius-lg); background: var(--surface); padding: 12px; display: flex; flex-direction: column; gap: 6px; position: relative; cursor: grab; transition: border-color 150ms, transform 150ms var(--ease); }
-.vaga.capa { grid-row: span 2; background-color: var(--tinta); color: #f3ece6; border-color: var(--tinta);
-  background-image: linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px); background-size: 10px 10px; }
-.vaga.livre { border-style: dashed; background: transparent; color: var(--text-faint); cursor: default; align-items: center; justify-content: center; text-align: center; font-size: var(--t-xs); }
-.vaga.capa.livre { color: rgba(255,255,255,.5); background-color: transparent; border-color: var(--border-strong); background-image: none; color: var(--text-faint); }
-.vaga.alvo { border-color: var(--accent); transform: scale(1.01); }
-.vaga .rotulo { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-faint); }
-.vaga.capa .rotulo { color: rgba(255,255,255,.55); }
-.vaga .nome { font-weight: 600; font-size: var(--t-md); line-height: 1.25; }
-.vaga.capa .nome { font-size: 22px; letter-spacing: -0.02em; }
-.vaga .preco { font-family: var(--font-mono); font-size: var(--t-sm); margin-top: auto; }
-.vaga .ctl { position: absolute; top: 8px; right: 8px; display: flex; gap: 2px; }
-.vaga .ctl button { width: 26px; height: 26px; border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-sm); cursor: pointer; font-size: 12px; color: var(--text-muted); }
-.vaga.capa .ctl button { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.2); color: #fff; }
-.vaga.capa .ecg-capa { position: absolute; left: 12px; right: 12px; bottom: 54px; height: 40px; }
-.vaga.capa .ecg-capa path { fill: none; stroke: #e7a1a8; stroke-width: 1.4; }
 
 /* ------------------------------------------------------------------ avisos */
 .aviso { border: 1px solid var(--border-strong); border-left: 3px solid var(--text-faint); border-radius: var(--radius); background: var(--surface); padding: 10px 14px; font-size: var(--t-sm); }
@@ -395,7 +376,7 @@ input.invalido { border-color: var(--alert); }
 
 /* ---------------------------------------------------------------- celular */
 @media (max-width: 960px) {
-  .grade-home, .detalhe, .detalhe.vitrine-grade { grid-template-columns: minmax(0, 1fr); gap: 32px; }
+  .grade-home, .detalhe { grid-template-columns: minmax(0, 1fr); gap: 32px; }
   .numeros { grid-template-columns: repeat(3, 1fr); }
   .numeros a:nth-child(4) { border-left: 0; padding-left: 0; }
   .numeros a:nth-child(n+4) { border-top: 1px solid var(--border); }
@@ -415,9 +396,6 @@ input.invalido { border-color: var(--alert); }
   .form-grade { grid-template-columns: 1fr; }
   .quadro { grid-template-columns: repeat(4, 82vw); scroll-snap-type: x mandatory; }
   .etapa { scroll-snap-align: start; min-height: 240px; }
-  .vagas { grid-template-columns: 1fr 1fr; grid-auto-rows: 120px; }
-  .vaga.capa { grid-column: 1 / -1; grid-row: span 1; }
-  .vaga.capa .ecg-capa { display: none; }
   .tabela-wrap .esconde-cel { display: none; }
   .barra-salvar { margin: 0 -16px; padding: 12px 16px; }
   .folha { padding: 22px 18px; }

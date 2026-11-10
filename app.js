@@ -56,7 +56,7 @@ const ETAPAS = [
 const ETAPA_NOME = { novo: 'Novo contato', consulta: 'Consulta marcada', exames: 'Exames', retorno: 'Retorno', acompanhamento: 'Em acompanhamento', perdido: 'Não seguiu' };
 const ABERTAS = ['novo', 'consulta', 'exames', 'retorno'];
 const STATUS_SERV = { disponivel: 'Disponível', 'agenda-cheia': 'Agenda cheia', pausado: 'Pausado', arquivado: 'Arquivado' };
-const ORIGENS = ['Site', 'Indicação médica', 'Indicação de paciente', 'Convênio', 'Google', 'Instagram', 'Doctoralia', 'Telefone'];
+const ORIGENS = ['WhatsApp', 'Indicação médica', 'Indicação de paciente', 'Convênio', 'Google', 'Instagram', 'Doctoralia', 'Telefone'];
 const CONVENIOS = ['Particular', 'Unimed', 'Bradesco Saúde', 'SulAmérica', 'Amil'];
 const RISCOS = ['Hipertensão', 'Diabetes', 'Dislipidemia', 'Tabagismo', 'Obesidade', 'Histórico familiar', 'Doença coronariana', 'Fibrilação atrial', 'Insuficiência cardíaca'];
 const FORMAS = ['A definir', 'Pix', 'Cartão de crédito', 'Cartão de débito', 'Dinheiro', 'Convênio'];
@@ -159,7 +159,7 @@ function telaEntrada() {
         <span class="marca-sinal" style="width:38px;height:38px"><svg viewBox="0 0 32 32" width="24" height="24"><path d="M3 17h6l2-4 3 9 3-14 2.5 9H29" fill="none" stroke="white" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/></svg></span>
         <div><b>${esc(D().settings.nome)}</b><div class="small muted">Painel do consultório · demonstração</div></div>
       </div>
-      <p>Pacientes, jornada do primeiro contato ao retorno, exames, vitrine do site e divulgação, num lugar só. Entre com o acesso de demonstração:</p>
+      <p>Pacientes, jornada do primeiro contato ao retorno, exames, orçamentos e divulgação, num lugar só. Entre com o acesso de demonstração:</p>
       <label class="campo">E-mail<input type="email" name="email" value="recepcao@ritmocardio.demo" autocomplete="off"></label>
       <label class="campo">Senha<input type="password" name="senha" value="demonstracao" autocomplete="off"></label>
       <button class="btn acento">Entrar no painel</button>
@@ -183,7 +183,6 @@ const rotas = [
   [/^pacientes\/(.+)$/, telaPaciente],
   [/^servicos$/, telaServicos],
   [/^servicos\/(.+)$/, telaServico],
-  [/^site$/, telaVitrine],
   [/^divulgacao$/, telaDivulgacao],
   [/^consultorio$/, telaConsultorio],
   [/^orcamento\/(.+)$/, telaOrcamento],
@@ -233,7 +232,7 @@ function pendencias() {
     const p = paciente(j.pacienteId); if (!p) continue;
     const dias = diasDesde(j.etapaDesde);
     const link = `#/jornada/${j.id}`;
-    if (j.etapa === 'novo' && dias >= 1) out.push({ cod: 'SEM RESP', titulo: p.nome, texto: `Pedido pelo site sem resposta ${dias === 1 ? 'desde ontem' : `há ${dias} dias`}.`, peso: 3, link });
+    if (j.etapa === 'novo' && dias >= 1) out.push({ cod: 'SEM RESP', titulo: p.nome, texto: `${j.pedido} sem resposta ${dias === 1 ? 'desde ontem' : `há ${dias} dias`}.`, peso: 3, link });
     if (j.etapa === 'exames' && dias >= 21) out.push({ cod: servico(j.servicoId)?.sigla || 'EXAME', titulo: p.nome, texto: `${dias} dias em Exames. Já fez o exame? Vale ligar.`, peso: 2, link });
     if (j.orcamento?.validade && j.orcamento.validade < hojeISO()) out.push({ cod: 'ORÇ', titulo: p.nome, texto: `Orçamento venceu em ${dataCurta(j.orcamento.validade + 'T12:00')}. Renove antes de cobrar.`, peso: 1, link });
   }
@@ -247,8 +246,7 @@ function pendencias() {
     if (s.status === 'arquivado') continue;
     const link = `#/servicos/${s.id}`;
     if (s.status === 'agenda-cheia' && s.statusDesde && diasDesde(s.statusDesde) >= 7) out.push({ cod: s.sigla, titulo: s.nome, texto: `Agenda cheia há ${diasDesde(s.statusDesde)} dias. Abrir horários extras?`, peso: 2, link });
-    if (!s.preparo?.trim()) out.push({ cod: s.sigla, titulo: s.nome, texto: 'Sem orientação de preparo. O site e o WhatsApp mandam o texto em branco.', peso: 1, link });
-    if (!s.descricao?.trim()) out.push({ cod: s.sigla, titulo: s.nome, texto: 'Sem descrição para o site.', peso: 0, link });
+    if (!s.preparo?.trim()) out.push({ cod: s.sigla, titulo: s.nome, texto: 'Sem orientação de preparo. A confirmação pelo WhatsApp vai sem ela.', peso: 1, link });
   }
   return out.sort((a, b) => b.peso - a.peso);
 }
@@ -399,7 +397,7 @@ function telaJornada(el) {
     const soma = cards.reduce((t, j) => t + saldo(j.orcamento), 0);
     return `<section class="etapa" data-etapa="${e.id}" aria-label="${e.nome}">
       <div class="etapa-cab"><span class="passo">${String(i + 1).padStart(2, '0')}</span><b>${e.nome}</b><span class="num">${cards.length}</span>${soma ? `<span class="valor num">${brl(soma)}</span>` : ''}</div>
-      ${cards.map(cartaoJornada).join('') || `<div class="solto">${e.id === 'novo' ? 'Pedidos do site e da Doctoralia aparecem aqui sozinhos.' : 'Arraste um cartão para cá.'}</div>`}
+      ${cards.map(cartaoJornada).join('') || `<div class="solto">${e.id === 'novo' ? 'Pedidos da Doctoralia aparecem aqui sozinhos. Os de WhatsApp e telefone entram por Nova jornada.' : 'Arraste um cartão para cá.'}</div>`}
     </section>`;
   }).join('')}</div>`;
 
@@ -465,7 +463,7 @@ function modalNovaJornada(pacienteId) {
       <label class="campo">Exame ou consulta de interesse
         <select name="servico"><option value="">Ainda não definiu</option>${d.servicos.filter((s) => s.status !== 'arquivado').map((s) => `<option value="${s.id}">${esc(s.sigla)} · ${esc(s.nome)}</option>`).join('')}</select></label>
       <div class="form-grade">
-        <label class="campo">Pedido<select name="pedido">${['Agendar consulta', 'Pedido de exame', 'Mensagem pelo site', 'Segunda opinião'].map((o) => `<option>${o}</option>`).join('')}</select></label>
+        <label class="campo">Pedido<select name="pedido">${['Agendar consulta', 'Pedido de exame', 'Mensagem no WhatsApp', 'Segunda opinião'].map((o) => `<option>${o}</option>`).join('')}</select></label>
         <label class="campo">Como chegou<select name="origem">${ORIGENS.map((o) => `<option ${pre?.origem === o ? 'selected' : ''}>${o}</option>`).join('')}</select></label>
       </div>
       <label class="campo">Anotação<textarea name="nota" rows="2" placeholder="Ex.: trouxe pedido de Holter do clínico geral"></textarea></label>
@@ -907,7 +905,7 @@ function telaServicos(el) {
   let filtro = new URLSearchParams(location.hash.split('?')[1] || '').get('status') || 'ativos';
   el.innerHTML = `
     <div class="cab">
-      <div><h1>Exames e consultas</h1><div class="meta">O que o consultório oferece. Preço, preparo e descrição aparecem no site e nas mensagens.</div></div>
+      <div><h1>Exames e consultas</h1><div class="meta">O que o consultório oferece. Preço e preparo vão nos orçamentos e nas confirmações pelo WhatsApp.</div></div>
       <div class="acoes"><a class="btn acento" href="#/servicos/novo">+ Novo exame ou consulta</a></div>
     </div>
     <div class="barra-filtros">
@@ -923,7 +921,7 @@ function telaServicos(el) {
         <input type="search" id="q" placeholder="Filtrar por nome ou sigla"></label>
     </div>
     <div class="tabela-wrap"><table>
-      <thead><tr><th>Sigla</th><th>Exame ou consulta</th><th class="direita">Particular</th><th class="esconde-cel direita">Duração</th><th class="esconde-cel">Convênio</th><th class="esconde-cel direita">No mês</th><th>Status</th><th class="esconde-cel">No site</th></tr></thead>
+      <thead><tr><th>Sigla</th><th>Exame ou consulta</th><th class="direita">Particular</th><th class="esconde-cel direita">Duração</th><th class="esconde-cel">Convênio</th><th class="esconde-cel direita">No mês</th><th>Status</th></tr></thead>
       <tbody id="tb"></tbody>
     </table></div>`;
   const desenhar = () => {
@@ -938,16 +936,13 @@ function telaServicos(el) {
         <td class="esconde-cel direita num">${s.duracao} min</td>
         <td class="esconde-cel">${s.convenio ? 'Aceita' : '<span class="faint">Só particular</span>'}</td>
         <td class="esconde-cel direita num">${s.realizadosMes}</td>
-        <td data-parar><select data-status="${s.id}" aria-label="Status de ${esc(s.nome)}" style="height:30px;width:auto;font-size:13px">${Object.entries(STATUS_SERV).map(([k, v]) => `<option value="${k}" ${k === s.status ? 'selected' : ''}>${v}</option>`).join('')}</select></td>
-        <td class="esconde-cel" data-parar><label class="opcao" style="font-size:12px"><input type="checkbox" data-destaque="${s.id}" ${s.destaque ? 'checked' : ''}> Destaque</label></td>
-      </tr>`).join('') : `<tr><td colspan="8"><div class="vazio" style="border:0">Nada neste filtro. Mude o filtro ou a busca.</div></td></tr>`;
+        <td data-parar><select data-status="${s.id}" aria-label="Status de ${esc(s.nome)}" style="height:30px;width:auto;font-size:13px">${Object.entries(STATUS_SERV).map(([k, v]) => `<option value="${k}" ${k === s.status ? 'selected' : ''}>${v}</option>`).join('')}</select></td></tr>`).join('') : `<tr><td colspan="7"><div class="vazio" style="border:0">Nada neste filtro. Mude o filtro ou a busca.</div></td></tr>`;
     $$('[data-ir]', el).forEach((tr) => (tr.onclick = (e) => { if (!e.target.closest('[data-parar]')) location.hash = tr.dataset.ir; }));
     $$('[data-status]', el).forEach((sel) => (sel.onchange = () => {
       const s = servico(sel.dataset.status); const antes = s.status;
       s.status = sel.value; s.statusDesde = new Date().toISOString(); salvar();
       toast(`${s.sigla}: ${STATUS_SERV[s.status]}`, { desfazer: () => { s.status = antes; salvar(); render(); } });
     }));
-    $$('[data-destaque]', el).forEach((c) => (c.onchange = () => { const s = servico(c.dataset.destaque); s.destaque = c.checked; salvar(); toast(c.checked ? 'Em destaque no site' : 'Saiu dos destaques'); }));
   };
   $$('[data-st]', el).forEach((b) => (b.onclick = () => { filtro = b.dataset.st; desenhar(); }));
   $('#q', el).oninput = desenhar;
@@ -957,7 +952,7 @@ function telaServicos(el) {
 function telaServico(el, id) {
   const d = D();
   const novo = id === 'novo';
-  const s = novo ? { id: db.novoId('s'), sigla: '', nome: '', categoria: 'Exame', preco: 0, duracao: 30, convenio: true, status: 'disponivel', destaque: false, preparo: '', descricao: '', realizadosMes: 0, criado: new Date().toISOString() } : servico(id);
+  const s = novo ? { id: db.novoId('s'), sigla: '', nome: '', categoria: 'Exame', preco: 0, duracao: 30, convenio: true, status: 'disponivel', preparo: '', realizadosMes: 0, criado: new Date().toISOString() } : servico(id);
   if (!s) { el.innerHTML = `<p class="vazio">Não encontrado. <a class="btn" href="#/servicos">Voltar</a></p>`; return; }
   const procura = d.jornadas.filter((j) => j.servicoId === s.id && ABERTAS.includes(j.etapa)).length;
   el.innerHTML = `
@@ -978,14 +973,12 @@ function telaServico(el, id) {
             <label class="campo">Status<select name="status">${Object.entries(STATUS_SERV).map(([k, v]) => `<option value="${k}" ${k === s.status ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
             <div style="display:grid;gap:8px;align-content:end">
               <label class="opcao"><input type="checkbox" name="convenio" ${s.convenio ? 'checked' : ''}><span>Aceita convênio</span></label>
-              <label class="opcao"><input type="checkbox" name="destaque" ${s.destaque ? 'checked' : ''}><span>Destaque no site</span></label>
             </div>
           </div>
         </div>
         <div class="bloco"><h3>Textos para o paciente</h3><p class="muted">O preparo vai junto na confirmação pelo WhatsApp. Escreva como você falaria no telefone.</p>
           <div class="form-grade">
             <label class="campo inteiro">Preparo<textarea name="preparo" rows="3" placeholder="Ex.: Sem jejum. Vir com roupa de duas peças.">${esc(s.preparo)}</textarea></label>
-            <label class="campo inteiro">Descrição no site<textarea name="descricao" rows="3">${esc(s.descricao)}</textarea></label>
           </div>
         </div>
         ${novo ? '<button class="btn acento">Cadastrar</button>' : `<div class="bloco"><button type="button" class="btn perigo" id="arquivar">${s.status === 'arquivado' ? 'Excluir de vez' : 'Arquivar'}</button></div>`}
@@ -1014,7 +1007,7 @@ function telaServico(el, id) {
     if (!f.nome.value.trim()) { f.nome.classList.add('invalido'); f.nome.focus(); toast('Informe o nome.', { erro: true }); return; }
     const antes = s.status;
     Object.assign(s, { nome: f.nome.value.trim(), sigla: (f.sigla.value.trim() || f.nome.value.trim().split(' ')[0].slice(0, 6)).toUpperCase(), categoria: f.categoria.value, preco: Number(f.preco.value) || 0,
-      duracao: Number(f.duracao.value) || 30, status: f.status.value, convenio: f.convenio.checked, destaque: f.destaque.checked, preparo: f.preparo.value.trim(), descricao: f.descricao.value.trim() });
+      duracao: Number(f.duracao.value) || 30, status: f.status.value, convenio: f.convenio.checked, preparo: f.preparo.value.trim() });
     if (antes !== s.status) s.statusDesde = new Date().toISOString();
     if (novo) d.servicos.push(s);
     saindoComAlteracoes = null; salvar(); toast(novo ? 'Cadastrado' : 'Salvo');
@@ -1028,89 +1021,20 @@ function telaServico(el, id) {
       saindoComAlteracoes = null; salvar(); location.hash = '#/servicos'; toast('Excluído');
       return;
     }
-    const antes = s.status; s.status = 'arquivado'; s.destaque = false; salvar();
+    const antes = s.status; s.status = 'arquivado'; salvar();
     saindoComAlteracoes = null; location.hash = '#/servicos';
     toast(`${s.nome} arquivado`, { desfazer: () => { s.status = antes; salvar(); render(); } });
   });
-}
-
-/* ------------------------------------------------------------ tela: Vitrine */
-const VAGAS = 6;
-function telaVitrine(el) {
-  const d = D();
-  const atual = () => d.vitrine.rascunho || d.vitrine.publicada;
-  const desenhar = () => {
-    const ordem = atual().filter((id) => servico(id) && servico(id).status !== 'arquivado');
-    const alterada = d.vitrine.rascunho && JSON.stringify(d.vitrine.rascunho) !== JSON.stringify(d.vitrine.publicada);
-    const fora = d.servicos.filter((s) => !['arquivado', 'pausado'].includes(s.status) && !ordem.includes(s.id));
-    el.innerHTML = `
-      <div class="cab">
-        <div><h1>Vitrine do site</h1><div class="meta">O que aparece primeiro na página inicial. A primeira vaga é a capa.</div></div>
-        <div class="acoes">${alterada ? '<span class="small" style="color:var(--wait);font-weight:600;align-self:center">Vitrine alterada, ainda não publicada</span><button class="btn fantasma" id="desfazer-v">Desfazer</button>' : ''}<button class="btn acento" id="publicar" ${alterada ? '' : 'disabled'}>Publicar vitrine</button></div>
-      </div>
-      <div class="detalhe vitrine-grade">
-        <section aria-label="Vagas da vitrine">
-          <div class="vagas" id="vagas">
-            ${Array.from({ length: VAGAS }, (_, i) => {
-              const s = servico(ordem[i]);
-              if (!s) return `<div class="vaga livre${i === 0 ? ' capa' : ''}" data-vaga="${i}">${i === 0 ? 'Capa livre. Sem destaque, o site mostra a consulta cardiológica.' : 'Vaga livre'}</div>`;
-              return `<div class="vaga${i === 0 ? ' capa' : ''}" draggable="true" data-vaga="${i}" data-id="${s.id}">
-                <span class="rotulo">${i === 0 ? 'Capa do site' : `Vaga ${i + 1}`} · <span class="mono">${esc(s.sigla)}</span></span>
-                <span class="nome">${esc(s.nome)}</span>
-                ${i === 0 ? svgECG(400, 40, 26, 120, 1.3, 'ecg-capa') : ''}
-                <span class="preco">${d.settings.mostrarPrecos ? brl(s.preco) : s.convenio ? 'Particular e convênios' : 'Particular'}</span>
-                ${s.status === 'agenda-cheia' ? '<span class="status st-agenda-cheia" style="position:absolute;bottom:10px;right:10px">Agenda cheia</span>' : ''}
-                <div class="ctl">
-                  <button type="button" data-mover="${i}" data-dir="-1" aria-label="Mover para a vaga anterior" ${i === 0 ? 'disabled' : ''}>←</button>
-                  <button type="button" data-mover="${i}" data-dir="1" aria-label="Mover para a próxima vaga" ${i >= ordem.length - 1 ? 'disabled' : ''}>→</button>
-                  <button type="button" data-tirar="${s.id}" aria-label="Tirar da vitrine">×</button>
-                </div>
-              </div>`;
-            }).join('')}
-          </div>
-          <p class="small muted" style="margin-top:10px">Arraste as vagas ou use as setas para mudar a ordem.</p>
-        </section>
-        <section aria-labelledby="h-fora">
-          <h2 class="secao" id="h-fora">Fora da vitrine <span class="num">${fora.length}</span></h2>
-          ${fora.length ? `<ul class="lista">${fora.map((s) => `<li class="linha">
-              <span class="sigla">${esc(s.sigla)}</span>
-              <span class="corpo"><span class="titulo">${esc(s.nome)}</span><span class="sub">${brl(s.preco)} · ${STATUS_SERV[s.status]}</span></span>
-              <button class="btn sm" data-por="${s.id}" ${ordem.length >= VAGAS ? 'disabled title="Vitrine cheia: tire um item para liberar uma vaga"' : ''}>Pôr na vitrine</button>
-            </li>`).join('')}</ul>` : '<p class="vazio">Todos os exames disponíveis já estão na vitrine.</p>'}
-          ${ordem.length >= VAGAS ? '<p class="small muted" style="margin-top:8px">Vitrine cheia. Tire um item para liberar uma vaga.</p>' : ''}
-        </section>
-      </div>`;
-    const mudar = (nova) => { d.vitrine.rascunho = nova; salvar(); desenhar(); };
-    $$('[data-mover]', el).forEach((b) => (b.onclick = () => { const i = Number(b.dataset.mover); const j = i + Number(b.dataset.dir); const n = [...ordem]; [n[i], n[j]] = [n[j], n[i]]; mudar(n); }));
-    $$('[data-tirar]', el).forEach((b) => (b.onclick = () => mudar(ordem.filter((x) => x !== b.dataset.tirar))));
-    $$('[data-por]', el).forEach((b) => (b.onclick = () => mudar([...ordem, b.dataset.por])));
-    let de = null;
-    $$('.vaga[draggable]', el).forEach((v) => {
-      v.addEventListener('dragstart', (e) => { de = Number(v.dataset.vaga); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(de)); });
-    });
-    $$('.vaga', el).forEach((v) => {
-      v.addEventListener('dragover', (e) => { e.preventDefault(); v.classList.add('alvo'); });
-      v.addEventListener('dragleave', () => v.classList.remove('alvo'));
-      v.addEventListener('drop', (e) => {
-        e.preventDefault(); v.classList.remove('alvo');
-        const para = Math.min(Number(v.dataset.vaga), ordem.length - 1); if (de === null || de === para) return;
-        const n = [...ordem]; const [item] = n.splice(de, 1); n.splice(para, 0, item); mudar(n);
-      });
-    });
-    $('#publicar', el).onclick = () => { d.vitrine.publicada = [...ordem]; d.vitrine.rascunho = null; salvar(); desenhar(); toast('Vitrine publicada. O site já mostra a nova ordem.'); };
-    $('#desfazer-v', el)?.addEventListener('click', () => { d.vitrine.rascunho = null; salvar(); desenhar(); });
-  };
-  desenhar();
 }
 
 /* ---------------------------------------------------------- tela: Divulgação */
 function telaDivulgacao(el) {
   const d = D(); const dv = d.divulgacao;
   const ST = { publicado: 'Publicado', analise: 'Em análise', nao: 'Não publicado' };
-  const link = `https://${d.settings.nome.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '')}.com.br/agendar`;
+  const link = `https://wa.me/55${soDigitos(d.settings.whatsapp)}?text=${encodeURIComponent(`Olá! Vi o perfil da ${d.settings.nome} no Google e quero marcar uma consulta.`)}`;
   const ativos = d.servicos.filter((s) => !['arquivado', 'pausado'].includes(s.status));
   el.innerHTML = `
-    <div class="cab"><div><h1>Divulgação</h1><div class="meta">Leve os exames e consultas para a Doctoralia, o Google e os anúncios do Instagram.</div></div></div>
+    <div class="cab"><div><h1>Divulgação</h1><div class="meta">Leve os exames e consultas para a Doctoralia e para o perfil no Google.</div></div></div>
     <p class="aviso info" style="margin:0 0 24px">Publicidade médica segue a Resolução CFM nº 2.336/2023: sem promessa de resultado, sem antes e depois e sempre com CRM e RQE da responsável (<b>${esc(d.settings.medico)} · ${esc(d.settings.registro)}</b>).</p>
     <div class="bloco">
       <h3 style="display:flex;align-items:center;gap:10px">Doctoralia ${dv.doctoralia ? '<span class="status st-acompanhamento">Conectada</span>' : '<span class="status st-nao">Não conectada</span>'}</h3>
@@ -1127,16 +1051,8 @@ function telaDivulgacao(el) {
     </div>
     <div class="bloco">
       <h3>Perfil da Empresa no Google</h3>
-      <p class="muted">Cole este endereço no botão "Agendar" do perfil no Google Maps. Quem agenda por lá cai na Jornada como "Google".</p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;max-width:560px"><input type="text" readonly value="${link}" id="link-ag" class="mono" style="flex:1;min-width:220px;font-size:13px"><button class="btn" id="copiar">Copiar endereço</button></div>
-    </div>
-    <div class="bloco">
-      <h3>Instagram e Facebook</h3>
-      <p class="muted">O Pixel do Meta mede quantas pessoas que viram o anúncio pediram consulta no site. Só é ativado depois que o visitante aceita os cookies (LGPD).</p>
-      <form id="f-px" style="display:flex;gap:8px;flex-wrap:wrap;max-width:560px">
-        <label class="campo" style="flex:1;min-width:220px">ID do Pixel do Meta<input type="text" name="pixel" inputmode="numeric" class="mono" value="${esc(dv.pixel)}" placeholder="15 ou 16 números"></label>
-        <button class="btn" style="align-self:end">${dv.pixel ? 'Salvar' : 'Ativar Pixel'}</button>
-      </form>
+      <p class="muted">Cole este link no botão "Agendar" do perfil no Google Maps. Quem clica abre o WhatsApp do consultório com a mensagem pronta. Ao criar a jornada, marque "Google" em Como chegou.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;max-width:560px"><input type="text" readonly value="${esc(link)}" id="link-ag" class="mono" style="flex:1;min-width:220px;font-size:13px" aria-label="Link do WhatsApp para o Google"><button class="btn" id="copiar">Copiar link</button></div>
     </div>`;
   $('#conectar', el)?.addEventListener('click', (e) => {
     e.target.disabled = true; e.target.textContent = 'Conectando…';
@@ -1148,12 +1064,7 @@ function telaDivulgacao(el) {
     b.disabled = true; b.textContent = 'Enviando…';
     setTimeout(() => { dv.perfis[id] = era === 'publicado' ? 'publicado' : 'analise'; salvar(); render(); toast(era ? 'Atualizado na Doctoralia' : 'Enviado. A Doctoralia revisa em até 1 dia útil.'); }, 700);
   }));
-  $('#copiar', el).onclick = async () => { try { await navigator.clipboard.writeText($('#link-ag', el).value); toast('Endereço copiado'); } catch { $('#link-ag', el).select(); toast('Selecionado. Use Ctrl+C para copiar.'); } };
-  $('#f-px', el).onsubmit = (e) => {
-    e.preventDefault(); const v = soDigitos(e.target.pixel.value);
-    if (v && (v.length < 15 || v.length > 16)) { toast('O ID do Pixel tem 15 ou 16 números.', { erro: true }); return; }
-    dv.pixel = v; salvar(); render(); toast(v ? 'Pixel ativado no site' : 'Pixel desativado');
-  };
+  $('#copiar', el).onclick = async () => { try { await navigator.clipboard.writeText($('#link-ag', el).value); toast('Link copiado'); } catch { $('#link-ag', el).select(); toast('Selecionado. Use Ctrl+C para copiar.'); } };
 }
 
 /* ---------------------------------------------------------- tela: Consultório */
@@ -1161,9 +1072,9 @@ function telaConsultorio(el) {
   const d = D(); const st = d.settings;
   const campo = (nome, rotulo, ajuda = '', tipo = 'text', cls = '') => `<label class="campo ${cls}">${rotulo}${ajuda ? ` <span class="ajuda">${ajuda}</span>` : ''}<input type="${tipo}" name="${nome}" value="${esc(st[nome])}"></label>`;
   el.innerHTML = `
-    <div class="cab"><div><h1>Consultório</h1><div class="meta">Dados que aparecem no site, nos orçamentos e nas mensagens. Salvou, mudou na hora.</div></div></div>
+    <div class="cab"><div><h1>Consultório</h1><div class="meta">Dados que aparecem nos orçamentos e nas mensagens. Salvou, mudou na hora.</div></div></div>
     <form id="f-cfg" novalidate>
-      <div class="bloco"><h3>Contato</h3><p class="muted">Usado no rodapé do site, nos orçamentos e em todos os botões de WhatsApp.</p>
+      <div class="bloco"><h3>Contato</h3><p class="muted">Usado nos orçamentos impressos e nas mensagens de WhatsApp.</p>
         <div class="form-grade">
           ${campo('nome', 'Nome do consultório')}
           ${campo('whatsapp', 'WhatsApp', '', 'tel')}
@@ -1175,18 +1086,6 @@ function telaConsultorio(el) {
         </div></div>
       <div class="bloco"><h3>Responsável técnica</h3><p class="muted">Obrigatório em toda peça de divulgação médica.</p>
         <div class="form-grade">${campo('medico', 'Médica responsável')}${campo('registro', 'CRM e RQE')}</div></div>
-      <div class="bloco"><h3>Página inicial e "O consultório"</h3><p class="muted">Textos curtos do site.</p>
-        <div class="form-grade">
-          ${campo('frase', 'Frase curta', 'Aparece no rodapé e na busca do Google.', 'text', 'inteiro')}
-          ${campo('anos', 'Tempo de consultório', 'Ex.: 14 anos')}
-          ${campo('convenios', 'Convênios aceitos', 'Separe por vírgula.')}
-          <label class="campo inteiro">Sobre o consultório<textarea name="sobre" rows="3">${esc(st.sobre)}</textarea></label>
-        </div></div>
-      <div class="bloco"><h3>Vitrine</h3>
-        <div style="display:grid;gap:12px">
-          <label class="opcao"><input type="checkbox" name="mostrarConvenios" ${st.mostrarConvenios ? 'checked' : ''}><span>Mostrar os convênios no site<span class="muted">Quem tem convênio decide mais rápido quando vê o logo da operadora.</span></span></label>
-          <label class="opcao"><input type="checkbox" name="mostrarPrecos" ${st.mostrarPrecos ? 'checked' : ''}><span>Mostrar preço particular no site<span class="muted">Desligado, o site mostra "Particular e convênios" e o paciente pede orçamento.</span></span></label>
-        </div></div>
       <div class="barra-salvar" id="barra-salvar" hidden><span>Alterações não salvas</span><button type="button" class="btn fantasma" id="descartar">Descartar</button><button class="btn acento">Salvar</button></div>
     </form>
     <form class="bloco" id="f-senha" novalidate style="max-width:560px">
@@ -1204,9 +1103,8 @@ function telaConsultorio(el) {
   $('#descartar', el).onclick = () => { saindoComAlteracoes = null; render(); };
   f.onsubmit = (e) => {
     e.preventDefault();
-    for (const k of ['nome', 'whatsapp', 'telefone', 'instagram', 'endereco', 'cidade', 'horario', 'medico', 'registro', 'frase', 'anos', 'convenios', 'sobre']) st[k] = f[k].value.trim();
-    st.mostrarConvenios = f.mostrarConvenios.checked; st.mostrarPrecos = f.mostrarPrecos.checked;
-    saindoComAlteracoes = null; salvar(); render(); toast('Salvo. O site já foi atualizado.');
+    for (const k of ['nome', 'whatsapp', 'telefone', 'instagram', 'endereco', 'cidade', 'horario', 'medico', 'registro']) st[k] = f[k].value.trim();
+    saindoComAlteracoes = null; salvar(); render(); toast('Dados do consultório salvos');
   };
   const fs = $('#f-senha', el);
   fs.onsubmit = (e) => {
@@ -1222,7 +1120,7 @@ function abrirBusca() {
   if ($('.paleta')) return;
   const acoes = [
     ['Abrir a jornada do paciente', '#/jornada'], ['Nova jornada', () => modalNovaJornada()], ['Cadastrar paciente', '#/pacientes/novo'],
-    ['Cadastrar exame ou consulta', '#/servicos/novo'], ['Organizar a vitrine do site', '#/site'], ['Divulgação (Doctoralia, Google, Meta)', '#/divulgacao'], ['Dados do consultório', '#/consultorio'],
+    ['Cadastrar exame ou consulta', '#/servicos/novo'], ['Divulgação (Doctoralia e Google)', '#/divulgacao'], ['Dados do consultório', '#/consultorio'],
   ];
   abrirCamada(`
     <input type="search" placeholder="Buscar paciente, telefone, exame ou ação…" aria-label="Busca rápida" autocomplete="off">

@@ -12,10 +12,12 @@ os dados são de exemplo e ficam só no navegador de quem abre. "Recomeçar do z
 | Proposta impressa | Orçamento impresso / PDF |
 | Clientes | Pacientes: ficha com fatores de risco, alerta clínico, última PA/FC, remédios, exclusão LGPD |
 | Estoque | Exames e consultas: preço, duração, convênio, preparo, status (Disponível, Agenda cheia, Pausado, Arquivado) |
-| Vitrine | Vitrine do site: capa + 5 vagas, arrastar, publicar |
-| Anúncios (Mercado Livre e Meta) | Divulgação: Doctoralia, Perfil da Empresa no Google, Pixel do Meta, aviso da Resolução CFM 2.336/2023 |
-| Loja (configurações) | Consultório: contato, CRM/RQE, textos do site, convênios, troca de senha |
+| Anúncios (Mercado Livre e Meta) | Divulgação: Doctoralia e link de WhatsApp para o Perfil da Empresa no Google, aviso da Resolução CFM 2.336/2023 |
+| Loja (configurações) | Consultório: contato, CRM/RQE, troca de senha |
 | Busca Ctrl+K | Busca Ctrl+K (pacientes, exames, ações) |
+
+**Sem site por enquanto:** a vitrine do site, o destaque e a descrição dos exames para o site, o Pixel do Meta
+e os textos do site nas configurações foram retirados. Os pedidos chegam por WhatsApp, telefone, Instagram e Doctoralia.
 
 ## Abrir no computador
 
