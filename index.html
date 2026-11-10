@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ritmo Cardiologia — Painel do consultório</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%238c1c2e'/><path d='M4 17h6l2-4 3 9 3-14 2.5 9H28' fill='none' stroke='white' stroke-width='2.4' stroke-linejoin='round' stroke-linecap='round'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topo" id="topo" hidden>
+    <div class="faixa">
+      <div class="faixa-in">
+        <a href="#/" class="marca" aria-label="Ritmo Cardiologia, painel">
+          <span class="marca-sinal" aria-hidden="true">
+            <svg viewBox="0 0 32 32" width="20" height="20"><path d="M3 17h6l2-4 3 9 3-14 2.5 9H29" fill="none" stroke="white" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/></svg>
+          </span>
+          <b id="nome-consultorio">Ritmo Cardiologia</b>
+          <span class="sub">Painel do consultório</span>
+        </a>
+        <span class="selo-demo">demonstração</span>
+        <div class="direita">
+          <button type="button" class="busca-btn" id="abrir-busca" aria-label="Buscar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+            <span class="txt">Buscar paciente, exame…</span>
+            <kbd>Ctrl K</kbd>
+          </button>
+          <a href="#/pacientes/novo" class="btn acento"><span aria-hidden="true" style="font-size:16px;line-height:1">+</span><span class="txt">Novo paciente</span></a>
+          <div style="position:relative">
+            <button type="button" class="icone-btn" id="abrir-menu" aria-label="Mais opções" aria-expanded="false">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+            </button>
+            <div class="menu-pop" id="menu" hidden>
+              <a href="#/consultorio">Dados do consultório</a>
+              <button type="button" data-acao="recomecar">Recomeçar do zero</button>
+              <hr>
+              <button type="button" data-acao="sair" style="color:var(--alert)">Sair</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="abas-wrap">
+      <nav class="abas" id="abas" aria-label="Painel">
+        <a href="#/" data-aba="">Hoje</a>
+        <a href="#/jornada" data-aba="jornada">Jornada<span class="contagem" id="cont-novos"></span></a>
+        <a href="#/pacientes" data-aba="pacientes">Pacientes</a>
+        <a href="#/servicos" data-aba="servicos">Exames e consultas</a>
+        <a href="#/site" data-aba="site">Vitrine do site</a>
+        <a href="#/divulgacao" data-aba="divulgacao">Divulgação</a>
+        <a href="#/consultorio" data-aba="consultorio">Consultório</a>
+        <span class="traco" id="traco" aria-hidden="true"><svg><path id="traco-path"/></svg></span>
+      </nav>
+    </div>
+  </header>
+  <main id="view" aria-live="polite"></main>
+  <div id="camada"></div>
+  <div class="toasts" id="toasts" role="status"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
