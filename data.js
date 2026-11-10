@@ -1,7 +1,7 @@
 // Dados de exemplo da demonstração. Tudo fica só neste navegador (localStorage).
 // As datas são relativas a hoje, para a demonstração parecer sempre "do dia".
 
-const CHAVE = 'ritmo-cardio-demo-v2';
+const CHAVE = 'ritmo-cardio-demo-v3';
 
 function quando(dias, h = 9, m = 0) {
   const d = new Date();
@@ -121,6 +121,59 @@ function semente() {
     instagram: '@ritmocardiologia',
   };
 
+  // Agenda: três colunas (médica, ecocardiografista, sala de exames)
+  const recursos = [
+    { id: 'r1', nome: 'Dra. Helena Maranhão', sub: 'Consultório 704', servicos: ['s1', 's7', 's8', 's9'] },
+    { id: 'r2', nome: 'Dr. Paulo Viana', sub: 'Ecocardiografia', servicos: ['s3', 's10'] },
+    { id: 'r3', nome: 'Sala de exames', sub: 'ECG · Holter · MAPA · Ergometria', servicos: ['s2', 's4', 's5', 's6'] },
+  ];
+  const DUR = Object.fromEntries(servicos.map((s) => [s.id, s.duracao]));
+  // Fora do horário de atendimento, a demonstração mostra o dia "em andamento" como se fossem 11h15.
+  const real = new Date();
+  const minReal = real.getHours() * 60 + real.getMinutes();
+  const agora = minReal >= 9 * 60 && minReal <= 17 * 60 ? real.getTime() : new Date(real.getFullYear(), real.getMonth(), real.getDate(), 11, 15).getTime();
+  // O status de hoje depende da hora em que a demonstração abre: o que já passou foi atendido.
+  function statusPorHora(inicio, dur, futuro) {
+    const ini = new Date(inicio).getTime(); const fim = ini + dur * 60000;
+    if (fim <= agora) return 'finalizado';
+    if (ini <= agora) return 'em-atendimento';
+    if (ini - agora <= 30 * 60000) return 'na-recepcao';
+    return futuro;
+  }
+  const A = (dia, h, m, recurso, pacienteId, servicoId, extra = {}) => {
+    const inicio = quando(dia, h, m);
+    const duracao = extra.duracao || DUR[servicoId] || 30;
+    const futuro = extra.status || (dia > 1 ? 'agendado' : 'confirmado');
+    const status = extra.fixo ? extra.status : dia < 0 ? 'finalizado' : dia === 0 ? statusPorHora(inicio, duracao, futuro) : futuro;
+    return { id: uid('a'), recurso, pacienteId, servicoId, inicio, duracao, status, obs: extra.obs || '', jornadaId: extra.jornadaId || null };
+  };
+  const agendamentos = [
+    // hoje
+    A(0, 7, 30, 'r1', 'p12', 's1'), A(0, 8, 20, 'r1', 'p9', 's1', { jornadaId: 'j15', obs: 'Retorno de 15 dias da IC. Trazer o peso diário anotado.' }),
+    A(0, 9, 10, 'r1', 'p14', 's1', { jornadaId: 'j9' }), A(0, 10, 0, 'r1', 'p3', 's1', { jornadaId: 'j4', obs: 'Palpitações à noite. Primeira consulta.' }),
+    A(0, 11, 0, 'r1', 'p8', 's7', { jornadaId: 'j5' }), A(0, 14, 0, 'r1', 'p11', 's1', { jornadaId: 'j7' }),
+    A(0, 15, 0, 'r1', 'p6', 's9', { status: 'agendado' }), A(0, 16, 20, 'r1', 'p5', 's1', { status: 'agendado', obs: 'Marca-passo: trazer o cartão do aparelho.' }),
+    A(0, 17, 20, 'r1', 'p18', 's1'),
+    A(0, 8, 0, 'r2', 'p1', 's3', { jornadaId: 'j8' }), A(0, 8, 40, 'r2', 'p7', 's3', { jornadaId: 'j10' }),
+    A(0, 9, 20, 'r2', 'p17', 's3', { fixo: true, status: 'faltou' }), A(0, 13, 30, 'r2', 'p4', 's3'),
+    A(0, 14, 10, 'r2', 'p2', 's3'), A(0, 16, 0, 'r2', 'p13', 's3', { status: 'agendado' }),
+    A(0, 7, 40, 'r3', 'p2', 's2'), A(0, 8, 0, 'r3', 'p11', 's5', { jornadaId: 'j7' }), A(0, 9, 0, 'r3', 'p4', 's6', { jornadaId: 'j6' }),
+    A(0, 10, 30, 'r3', 'p13', 's2', { jornadaId: 'j11' }), A(0, 11, 0, 'r3', 'p16', 's4', { jornadaId: 'j2', status: 'agendado' }),
+    A(0, 15, 30, 'r3', 'p3', 's4', { jornadaId: 'j4' }), A(0, 17, 0, 'r3', 'p10', 's2', { status: 'agendado' }),
+    // amanhã: algumas ainda sem confirmação
+    A(1, 8, 0, 'r1', 'p15', 's1', { status: 'agendado', obs: 'Ligar no fixo para confirmar (filha Regina).' }), A(1, 9, 0, 'r1', 'p1', 's1'),
+    A(1, 10, 0, 'r1', 'p10', 's1', { jornadaId: 'j3', status: 'agendado' }), A(1, 14, 0, 'r1', 'p4', 's1', { jornadaId: 'j6' }),
+    A(1, 8, 30, 'r2', 'p9', 's3'), A(1, 10, 0, 'r2', 'p12', 's3', { status: 'agendado' }),
+    A(1, 8, 0, 'r3', 'p14', 's5'), A(1, 9, 0, 'r3', 'p18', 's6'), A(1, 11, 0, 'r3', 'p6', 's6'),
+    // próximos dias
+    A(2, 9, 0, 'r1', 'p2', 's1'), A(2, 11, 0, 'r1', 'p13', 's1'), A(2, 8, 30, 'r3', 'p7', 's2'),
+    A(3, 8, 0, 'r1', 'p8', 's1'), A(3, 10, 0, 'r2', 'p11', 's3'), A(3, 15, 0, 'r3', 'p17', 's6'),
+    A(6, 9, 0, 'r1', 'p5', 's1'), A(7, 14, 0, 'r1', 'p9', 's1'),
+    // dias anteriores
+    A(-1, 9, 0, 'r1', 'p2', 's1'), A(-1, 10, 0, 'r1', 'p13', 's1'), A(-1, 14, 0, 'r2', 'p14', 's3'), A(-1, 8, 0, 'r3', 'p4', 's2'),
+    A(-2, 9, 0, 'r1', 'p11', 's1', { fixo: true, status: 'faltou' }), A(-2, 15, 0, 'r3', 'p18', 's6'),
+  ];
+
   return {
     versao: 1,
     settings,
@@ -128,6 +181,9 @@ function semente() {
     pacientes,
     jornadas,
     tarefas,
+    recursos,
+    agendamentos,
+    agendaHoras: { abre: 7, fecha: 19 },
     divulgacao: { doctoralia: false, perfis: { s1: 'publicado', s3: 'publicado', s4: 'analise' } },
     espaco: { usado: 612 * 1024 * 1024, limite: 1024 * 1024 * 1024 },
   };

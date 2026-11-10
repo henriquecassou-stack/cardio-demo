@@ -85,7 +85,11 @@ const reduz = () => window.matchMedia('(prefers-reduced-motion: reduce)').matche
 // Troca de tela e de etapa com View Transitions, quando o navegador tem; senão, troca direto.
 function comTransicao(fn) {
   if (!document.startViewTransition || reduz() || document.hidden) return fn();
-  try { document.startViewTransition(fn); } catch { fn(); }
+  try {
+    const t = document.startViewTransition(fn);
+    // Uma transição interrompida por outra (cliques rápidos) não é erro
+    t.ready.catch(() => {}); t.finished.catch(() => {});
+  } catch { fn(); }
 }
 // Números "leem" até o valor, como num monitor.
 function contar(raiz) {
@@ -144,9 +148,14 @@ function toast(texto, { desfazer, erro } = {}) {
 /* ------------------------------------------------------------------- camadas */
 function abrirCamada(html, { aoAbrir, classe = 'modal' } = {}) {
   const veu = document.createElement('div');
-  veu.className = 'veu';
+  veu.className = `veu${classe === 'gaveta' ? ' veu-gaveta' : ''}`;
   veu.innerHTML = `<div class="${classe}" role="dialog" aria-modal="true">${html}</div>`;
-  const fechar = () => { veu.remove(); document.removeEventListener('keydown', tecla); };
+  const fechar = () => {
+    document.removeEventListener('keydown', tecla);
+    if (reduz() || !veu.isConnected) { veu.remove(); return; }
+    veu.classList.add('fechando'); veu.style.pointerEvents = 'none';
+    setTimeout(() => veu.remove(), 180);
+  };
   const tecla = (e) => { if (e.key === 'Escape') fechar(); };
   veu.addEventListener('mousedown', (e) => { if (e.target === veu) fechar(); });
   document.addEventListener('keydown', tecla);
@@ -155,50 +164,40 @@ function abrirCamada(html, { aoAbrir, classe = 'modal' } = {}) {
   return fechar;
 }
 
-/* ---------------------------------------------------------------- cabeçalho */
+/* ------------------------------------------------------------ menu lateral */
 function atualizarContagens() {
   const n = D().jornadas.filter((j) => j.etapa === 'novo').length;
   $('#cont-novos').textContent = n ? n : '';
+  const restantes = agendaDoDia(chaveDia(new Date())).filter((a) => !['finalizado', 'faltou'].includes(a.status)).length;
+  $('#cont-agenda').textContent = restantes ? restantes : '';
   $('#nome-consultorio').textContent = D().settings.nome;
 }
-function moverTraco() {
-  const nav = $('#abas');
-  const ativa = $('a[aria-current="page"]', nav);
-  const traco = $('#traco');
-  const w = nav.scrollWidth;
-  traco.style.width = `${w}px`;
-  $('svg', traco).setAttribute('viewBox', `0 0 ${w} 14`);
-  $('svg', traco).setAttribute('width', w);
-  if (!ativa) { $('#traco-path').setAttribute('d', `M0,13 L${w},13`); return; }
-  const cx = ativa.offsetLeft + ativa.offsetWidth / 2;
-  const x0 = cx - 17 * 0.9;
-  const d = `M${ativa.offsetLeft},13 L${x0},13 ${batida(x0, 13, 0.9)} L${ativa.offsetLeft + ativa.offsetWidth},13`;
-  const path = $('#traco-path');
-  if (path.getAttribute('d') === d) return;
-  path.setAttribute('d', d);
-  // A batida se redesenha embaixo da aba nova
-  traco.classList.remove('bate'); void traco.getBoundingClientRect(); traco.classList.add('bate');
+function lateral(abrir) {
+  document.body.classList.toggle('lateral-aberta', abrir);
+  $('#abrir-lateral').setAttribute('aria-expanded', String(abrir));
 }
-window.addEventListener('resize', moverTraco);
-
+$('#abrir-lateral').addEventListener('click', () => lateral(true));
+$('#nav').addEventListener('click', (e) => { if (e.target.closest('a')) lateral(false); });
 $('#abrir-menu').addEventListener('click', (e) => {
   const m = $('#menu'); m.hidden = !m.hidden; e.currentTarget.setAttribute('aria-expanded', String(!m.hidden));
 });
 document.addEventListener('click', (e) => {
   if (!e.target.closest('#menu') && !e.target.closest('#abrir-menu')) $('#menu').hidden = true;
   const acao = e.target.closest('[data-acao]')?.dataset.acao;
+  if (acao === 'fechar-lateral') lateral(false);
   if (acao === 'recomecar') {
     if (!confirm('Recomeçar a demonstração? Tudo o que você fez aqui será apagado e os dados de exemplo voltam ao início.')) return;
-    db.recomecar(); location.hash = '#/'; render(); toast('Demonstração recomeçada com os dados de exemplo');
+    db.recomecar(); ultimaTela = null; location.hash = '#/'; render(); toast('Demonstração recomeçada com os dados de exemplo');
   }
   if (acao === 'sair') { try { sessionStorage.removeItem('ritmo-entrou'); } catch { /* */ } location.hash = '#/'; telaEntrada(); }
-  if (acao) $('#menu').hidden = true;
+  if (acao && acao !== 'fechar-lateral') $('#menu').hidden = true;
 });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && document.body.classList.contains('lateral-aberta')) lateral(false); });
 
 /* ---------------------------------------------------------------- entrada */
 function entrou() { try { return sessionStorage.getItem('ritmo-entrou') === '1'; } catch { return window.__entrou; } }
 function telaEntrada() {
-  $('#topo').hidden = true; view.innerHTML = '';
+  $('#app').hidden = true; view.innerHTML = '';
   const tela = document.createElement('div');
   tela.className = 'tela-entrada';
   tela.setAttribute('role', 'dialog');
@@ -210,7 +209,7 @@ function telaEntrada() {
         <span class="marca-sinal" style="width:38px;height:38px"><svg viewBox="0 0 32 32" width="24" height="24"><path d="M3 17h6l2-4 3 9 3-14 2.5 9H29" fill="none" stroke="white" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/></svg></span>
         <div><b>${esc(D().settings.nome)}</b><div class="small muted">Painel do consultório · demonstração</div></div>
       </div>
-      <p>Pacientes, jornada do primeiro contato ao retorno, exames, orçamentos e divulgação, num lugar só. Entre com o acesso de demonstração:</p>
+      <p>Agenda, pacientes, jornada do primeiro contato ao retorno, exames e orçamentos, num lugar só. Entre com o acesso de demonstração:</p>
       <label class="campo">E-mail<input type="email" name="email" value="recepcao@ritmocardio.demo" autocomplete="off"></label>
       <label class="campo">Senha<input type="password" name="senha" value="demonstracao" autocomplete="off"></label>
       <button class="btn acento">Entrar no painel</button>
@@ -227,7 +226,8 @@ function telaEntrada() {
 
 /* ---------------------------------------------------------------- roteador */
 const rotas = [
-  [/^$/, telaHoje],
+  [/^$/, telaAgenda],
+  [/^hoje$/, telaHoje],
   [/^jornada$/, telaJornada],
   [/^jornada\/(.+)$/, telaJornadaDetalhe],
   [/^pacientes$/, telaPacientes],
@@ -242,13 +242,13 @@ let saindoComAlteracoes = null;
 let ultimaTela = null; // re-render da mesma tela (salvar, marcar) não repete as entradas
 function render() {
   if (!entrou()) return telaEntrada();
-  $('#topo').hidden = false;
+  $('#app').hidden = false;
   const caminho = location.hash.replace(/^#\/?/, '').split('?')[0].replace(/\/$/, '');
   const aba = caminho.split('/')[0];
-  $$('#abas a').forEach((a) => a.toggleAttribute('aria-current', a.dataset.aba === (aba === 'orcamento' ? 'jornada' : aba)));
-  $$('#abas a[aria-current]').forEach((a) => a.setAttribute('aria-current', 'page'));
+  const ativa = aba === 'orcamento' ? 'jornada' : aba;
+  $$('#nav a').forEach((a) => { if (a.dataset.aba === ativa) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+  $('#cel-titulo').textContent = $('#nav a[aria-current] span')?.textContent || D().settings.nome;
   atualizarContagens();
-  requestAnimationFrame(moverTraco);
   saindoComAlteracoes = null;
   for (const [re, fn] of rotas) {
     const m = re.exec(caminho);
@@ -267,7 +267,7 @@ function render() {
       return;
     }
   }
-  view.innerHTML = `<div class="vazio">Página não encontrada. <a href="#/" class="btn">Voltar para Hoje</a></div>`;
+  view.innerHTML = `<div class="vazio">Página não encontrada. <a href="#/" class="btn">Voltar para a agenda</a></div>`;
 }
 let hashAnterior = location.hash;
 window.addEventListener('hashchange', () => {
@@ -298,6 +298,9 @@ function pendencias() {
     if (p.medida && paFora(p.medida.pa) && diasDesde(p.medida.em) >= 30) out.push({ cod: 'PA', titulo: p.nome, texto: `PA ${p.medida.pa} na última medida, há ${diasDesde(p.medida.em)} dias. Antecipar o retorno?`, peso: 2, link });
     if (p.alerta && p.medida && diasDesde(p.medida.em) >= 180) out.push({ cod: 'ALERTA', titulo: p.nome, texto: `${p.alerta}, sem consulta há ${diasDesde(p.medida.em)} dias.`, peso: 3, link, alerta: true });
   }
+  const amanha = new Date(); amanha.setDate(amanha.getDate() + 1);
+  const semConfirmar = agendaDoDia(chaveDia(amanha)).filter((a) => a.status === 'agendado');
+  if (semConfirmar.length) out.push({ cod: 'CONF', titulo: `${plural(semConfirmar.length, 'horário', 'horários')} de amanhã sem confirmação`, texto: semConfirmar.map((a) => `${hhmm(minutosDoDia(a.inicio))} ${nomeCurto(paciente(a.pacienteId)?.nome)}`).join(' · '), peso: 3, link: `#/?dia=${chaveDia(amanha)}` });
   for (const s of d.servicos) {
     if (s.status === 'arquivado') continue;
     const link = `#/servicos/${s.id}`;
@@ -312,7 +315,8 @@ function telaHoje(el) {
   const d = D();
   const abertas = d.jornadas.filter((j) => ABERTAS.includes(j.etapa));
   const novos = d.jornadas.filter((j) => j.etapa === 'novo').sort((a, b) => b.criado.localeCompare(a.criado));
-  const concluidasMes = d.jornadas.filter((j) => j.etapa === 'acompanhamento' && diasDesde(j.etapaDesde) <= 30).length;
+  const agendaHoje = agendaDoDia(chaveDia(new Date()));
+  const proximos = agendaHoje.filter((a) => !['finalizado', 'faltou'].includes(a.status)).slice(0, 5);
   const emAberto = abertas.reduce((t, j) => t + saldo(j.orcamento), 0);
   const media = abertas.length ? Math.round(abertas.reduce((t, j) => t + diasDesde(j.criado), 0) / abertas.length) : 0;
   const limite = inicioDoDia(2);
@@ -325,7 +329,7 @@ function telaHoje(el) {
   el.innerHTML = `
     <div class="cab">
       <div>
-        <h1>Hoje</h1>
+        <h1>Resumo do dia</h1>
         <div class="meta">${esc(hoje)} · ${plural(novos.length, 'pedido novo', 'pedidos novos')} · ${plural(atrasadas, 'tarefa atrasada', 'tarefas atrasadas')}</div>
       </div>
       <div class="acoes"><button class="btn" data-nova-jornada>+ Nova jornada</button></div>
@@ -343,7 +347,7 @@ function telaHoje(el) {
       <dl class="leituras">
         <a class="leitura destaque" href="#/jornada"><dt>Novos contatos</dt><dd data-conta="${novos.length}">${novos.length}</dd><span class="nota">esperando resposta</span></a>
         <a class="leitura" href="#/jornada"><dt>Em jornada</dt><dd data-conta="${abertas.length}">${abertas.length}</dd><span class="nota">do contato ao retorno</span></a>
-        <a class="leitura" href="#/jornada?ver=fechadas"><dt>Concluídas</dt><dd data-conta="${concluidasMes}">${concluidasMes}</dd><span class="nota">nos últimos 30 dias</span></a>
+        <a class="leitura" href="#/"><dt>Horários hoje</dt><dd data-conta="${agendaHoje.length}">${agendaHoje.length}</dd><span class="nota">${agendaHoje.filter((a) => a.status === 'finalizado').length} atendidos · ${agendaHoje.filter((a) => a.status === 'faltou').length} faltas</span></a>
         <a class="leitura" href="#/jornada"><dt>Orçamentos em aberto</dt><dd data-conta="${emAberto}" data-formato="brl">${brl(emAberto)}</dd><span class="nota">saldo a receber</span></a>
         <a class="leitura" href="#/jornada"><dt>Média na jornada</dt><dd><span data-conta="${media}">${media}</span><small>${media === 1 ? 'dia' : 'dias'}</small></dd><span class="nota">desde o primeiro contato</span></a>
       </dl>
@@ -362,6 +366,18 @@ function telaHoje(el) {
         </ul>${lista.length > 9 ? `<p class="small muted" style="margin-top:8px">Mais ${lista.length - 9} itens com prioridade menor.</p>` : ''}`}
       </section>
       <div class="coluna">
+        <section aria-labelledby="h-proximos">
+          <h2 class="secao" id="h-proximos">Próximos horários <span class="num">${proximos.length}</span><a class="link" href="#/">Agenda</a></h2>
+          ${proximos.length === 0 ? '<p class="vazio">Sem mais horários hoje.</p>' : `
+          <ul class="lista">
+            ${proximos.map((a) => { const p = paciente(a.pacienteId); const s = servico(a.servicoId); return `
+              <li><a class="linha" href="#/" data-abrir-ag="${a.id}">
+                <span class="hora-ag num">${hhmm(minutosDoDia(a.inicio))}</span>
+                <span class="corpo"><span class="titulo">${esc(p?.nome)}</span><span class="sub">${esc(s?.nome || '')} · ${esc(recurso(a.recurso)?.nome || '')}</span></span>
+                <span class="status-ag ag-${a.status}"><i></i>${STATUS_AG[a.status]}</span>
+              </a></li>`; }).join('')}
+          </ul>`}
+        </section>
         <section aria-labelledby="h-tarefas">
           <h2 class="secao" id="h-tarefas">Tarefas até amanhã <span class="num">${tarefas.length}</span><a class="link" href="#/jornada">Jornada</a></h2>
           ${tarefas.length === 0 ? '<p class="vazio">Nada marcado para hoje ou amanhã.</p>' : `
@@ -389,6 +405,7 @@ function telaHoje(el) {
     </div>`;
   ligarTarefas(el);
   $('[data-nova-jornada]', el).onclick = () => modalNovaJornada();
+  $$('[data-abrir-ag]', el).forEach((l) => l.addEventListener('click', (e) => { e.preventDefault(); abrirHorario(l.dataset.abrirAg); }));
   clearInterval(window.__relogio);
   window.__relogio = setInterval(() => { const r = $('#relogio'); if (r) r.textContent = hora(new Date().toISOString()); else clearInterval(window.__relogio); }, 20000);
 }
@@ -396,7 +413,7 @@ function telaHoje(el) {
 function linhaTarefa(t, comRef) {
   const j = t.jornadaId ? jornada(t.jornadaId) : null;
   const p = j ? paciente(j.pacienteId) : t.pacienteId ? paciente(t.pacienteId) : null;
-  const link = j ? `#/jornada/${j.id}` : p ? `#/pacientes/${p.id}` : '#/';
+  const link = j ? `#/jornada/${j.id}` : p ? `#/pacientes/${p.id}` : '#/hoje';
   const atr = atrasada(t.venceEm);
   return `<li class="tarefa${t.feita ? ' feita' : ''}" data-tarefa="${t.id}">
     <input type="checkbox" class="check" ${t.feita ? 'checked' : ''} aria-label="Concluir: ${esc(t.titulo)}">
@@ -600,6 +617,7 @@ function telaJornadaDetalhe(el, id) {
       </div>
       <div class="acoes">
         ${wa.length >= 10 ? `<a class="btn" data-wa href="https://wa.me/55${wa}?text=${encodeURIComponent(`Olá, ${p.nome.split(' ')[0]}! Aqui é da ${d.settings.nome}.`)}" target="_blank" rel="noopener">Conversar no WhatsApp</a>` : '<button class="btn" disabled title="Paciente sem telefone">Sem telefone</button>'}
+        ${aberta ? `<button class="btn acento" id="agendar-j">Agendar horário</button>` : ''}
         ${aberta ? `
           <select id="mudar-etapa" aria-label="Etapa" style="width:auto">${ETAPAS.map((e) => `<option value="${e.id}" ${e.id === j.etapa ? 'selected' : ''}>${e.nome}</option>`).join('')}</select>
           <button class="btn escuro" id="concluir">Concluir</button>
@@ -631,6 +649,11 @@ function telaJornadaDetalhe(el, id) {
           ${p.medida ? `<div class="par"><span>Última PA · FC</span><b class="${paFora(p.medida.pa) ? 'atrasada' : ''}">${esc(p.medida.pa)} · ${esc(p.medida.fc)} bpm</b></div>` : ''}
           ${p.convenio ? `<div class="par"><span>Convênio</span><span>${esc(p.convenio)}</span></div>` : ''}
         </div>` : ''}
+        ${(() => { const hs = d.agendamentos.filter((a) => a.jornadaId === j.id || (a.pacienteId === j.pacienteId && new Date(a.inicio) >= inicioDoDia(0))).sort((a, b) => a.inicio.localeCompare(b.inicio)); return hs.length ? `
+        <div class="painel">
+          <h3>Horários</h3>
+          <ul class="lista" style="border:0">${hs.map((a) => `<li><a class="linha" href="#/?dia=${chaveDia(a.inicio)}"><span class="hora-ag num">${dataCurta(a.inicio)}<small>${hhmm(minutosDoDia(a.inicio))}</small></span><span class="corpo"><span class="titulo">${esc(servico(a.servicoId)?.nome || '')}</span><span class="sub">${esc(recurso(a.recurso)?.nome || '')}</span></span><span class="status-ag ag-${a.status}"><i></i>${STATUS_AG[a.status]}</span></a></li>`).join('')}</ul>
+        </div>` : ''; })()}
         <div class="painel">
           <h3>Exame ou consulta de interesse</h3>
           <select id="trocar-servico" aria-label="Trocar exame ou consulta"><option value="">Ainda não definiu</option>${d.servicos.filter((x) => x.status !== 'arquivado' || x.id === j.servicoId).map((x) => `<option value="${x.id}" ${x.id === j.servicoId ? 'selected' : ''}>${esc(x.sigla)} · ${esc(x.nome)} · ${brl(x.preco)}</option>`).join('')}</select>
@@ -682,6 +705,7 @@ function telaJornadaDetalhe(el, id) {
 
   // Etapa
   $('#mudar-etapa', el)?.addEventListener('change', (e) => moverEtapa(j.id, e.target.value));
+  $('#agendar-j', el)?.addEventListener('click', () => modalAgendamento({ pacienteId: j.pacienteId, servicoId: j.servicoId || undefined, jornadaId: j.id }));
   $('#trocar-servico', el).onchange = (e) => {
     j.servicoId = e.target.value || null;
     const novo = servico(j.servicoId);
@@ -766,6 +790,7 @@ function telaJornadaDetalhe(el, id) {
     if (!confirm(`Excluir a jornada de ${p?.nome}? O histórico dela será apagado. A ficha do paciente continua.`)) return;
     d.jornadas = d.jornadas.filter((x) => x.id !== j.id);
     d.tarefas = d.tarefas.filter((t) => t.jornadaId !== j.id);
+    d.agendamentos.forEach((a) => { if (a.jornadaId === j.id) a.jornadaId = null; });
     salvar(); location.hash = '#/jornada'; toast('Jornada excluída');
   };
 }
@@ -875,6 +900,7 @@ function telaPaciente(el, id) {
         ${p.alerta ? `<div style="margin-top:8px"><span class="alerta-clinico">${esc(p.alerta)}</span></div>` : ''}
       </div>
       <div class="acoes" style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn acento" id="agendar-p">Agendar horário</button>
         <button class="btn" id="nova-j">+ Nova jornada</button>
       </div>
     </div>
@@ -919,6 +945,11 @@ function telaPaciente(el, id) {
       </form>
       ${novo ? '<div></div>' : `
       <div>
+        ${(() => { const hs = d.agendamentos.filter((a) => a.pacienteId === p.id).sort((a, b) => b.inicio.localeCompare(a.inicio)).slice(0, 5); return `
+        <div class="painel">
+          <h3>Horários <span class="num faint" style="font-weight:400">${hs.length}</span></h3>
+          ${hs.length ? `<ul class="lista" style="border:0">${hs.map((a) => `<li><a class="linha" href="#/?dia=${chaveDia(a.inicio)}"><span class="hora-ag num">${dataCurta(a.inicio)}<small>${hhmm(minutosDoDia(a.inicio))}</small></span><span class="corpo"><span class="titulo">${esc(servico(a.servicoId)?.nome || '')}</span><span class="sub">${esc(recurso(a.recurso)?.nome || '')}</span></span><span class="status-ag ag-${a.status}"><i></i>${STATUS_AG[a.status]}</span></a></li>`).join('')}</ul>` : '<p class="small muted" style="margin:0">Nenhum horário marcado.</p>'}
+        </div>`; })()}
         <div class="painel">
           <h3>Jornadas <span class="num faint" style="font-weight:400">${jornadas.length}</span></h3>
           ${jornadas.length ? `<ul class="lista" style="border-bottom:0">${jornadas.map((j) => { const s = servico(j.servicoId); return `
@@ -958,12 +989,14 @@ function telaPaciente(el, id) {
     if (novo) location.hash = `#/pacientes/${p.id}`; else render();
   };
   $('#nova-j', el)?.addEventListener('click', () => modalNovaJornada(p.id));
+  $('#agendar-p', el)?.addEventListener('click', () => modalAgendamento({ pacienteId: p.id }));
   $('#excluir-p', el)?.addEventListener('click', () => {
     if (!confirm(`Excluir ${p.nome} e todos os dados dele (ficha, jornadas e tarefas)? Não dá para desfazer.`)) return;
     const js = d.jornadas.filter((j) => j.pacienteId === p.id).map((j) => j.id);
     d.pacientes = d.pacientes.filter((x) => x.id !== p.id);
     d.jornadas = d.jornadas.filter((j) => j.pacienteId !== p.id);
     d.tarefas = d.tarefas.filter((t) => t.pacienteId !== p.id && !js.includes(t.jornadaId));
+    d.agendamentos = d.agendamentos.filter((a) => a.pacienteId !== p.id);
     saindoComAlteracoes = null; salvar(); location.hash = '#/pacientes'; toast('Paciente e dados excluídos');
   });
   ligarTarefas(el, render);
@@ -1188,10 +1221,367 @@ function telaConsultorio(el) {
   };
 }
 
+/* ===================================================================== AGENDA */
+const STATUS_AG = {
+  agendado: 'Agendado', confirmado: 'Confirmado', 'na-recepcao': 'Na recepção',
+  'em-atendimento': 'Em atendimento', finalizado: 'Finalizado', faltou: 'Faltou',
+};
+const FLUXO_AG = ['agendado', 'confirmado', 'na-recepcao', 'em-atendimento', 'finalizado'];
+const PX_MIN = 1.4; // 1 hora = 84 px
+const pad = (n) => String(n).padStart(2, '0');
+function chaveDia(d) { const x = new Date(d); return `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}`; }
+function dataDaChave(k) { const [y, m, dd] = k.split('-').map(Number); return new Date(y, m - 1, dd); }
+const minutosDoDia = (iso) => { const x = new Date(iso); return x.getHours() * 60 + x.getMinutes(); };
+const hhmm = (min) => `${pad(Math.floor(min / 60))}:${pad(min % 60)}`;
+function isoDe(k, min) { const x = dataDaChave(k); x.setHours(Math.floor(min / 60), min % 60, 0, 0); return x.toISOString(); }
+function agendaDoDia(k) { return D().agendamentos.filter((a) => chaveDia(a.inicio) === k).sort((a, b) => a.inicio.localeCompare(b.inicio)); }
+const recurso = (id) => D().recursos.find((r) => r.id === id);
+const recursoPara = (servicoId) => D().recursos.find((r) => r.servicos.includes(servicoId))?.id || D().recursos[0].id;
+const nomeCurto = (nome = '') => { const p = nome.split(' ').filter(Boolean); return p.length > 2 ? `${p[0]} ${p[p.length - 1]}` : nome; };
+function diaPorExtenso(k) { return dataDaChave(k).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' }); }
+function conflito(recursoId, k, ini, dur, ignorar) {
+  return D().agendamentos.find((a) => a.id !== ignorar && a.recurso === recursoId && a.status !== 'faltou' && chaveDia(a.inicio) === k
+    && ini < minutosDoDia(a.inicio) + a.duracao && minutosDoDia(a.inicio) < ini + dur);
+}
+function livres(recursoId, k, dur, ignorar, limite = 8) {
+  const { abre, fecha } = D().agendaHoras; const out = [];
+  // No dia de hoje, só oferece horários que ainda não passaram (durante o expediente)
+  const minAgora = new Date().getHours() * 60 + new Date().getMinutes();
+  const agoraMin = k === chaveDia(new Date()) && minAgora >= abre * 60 && minAgora < fecha * 60 ? minAgora : -1;
+  for (let m = abre * 60; m + dur <= fecha * 60 && out.length < limite; m += 15) {
+    if (m < agoraMin) continue;
+    if (!conflito(recursoId, k, m, dur, ignorar)) out.push(m);
+  }
+  return out;
+}
+
+function blocoAgenda(a) {
+  const p = paciente(a.pacienteId); const s = servico(a.servicoId);
+  const ini = minutosDoDia(a.inicio) - D().agendaHoras.abre * 60;
+  const h = Math.max(24, a.duracao * PX_MIN - 3);
+  const curto = h < 46;
+  return `<button type="button" class="bloco ag-${a.status}${curto ? ' curto' : ''}" data-ag="${a.id}" draggable="true"
+    style="top:${ini * PX_MIN + 1}px;height:${h}px;view-transition-name:ag-${esc(a.id)}"
+    aria-label="${hhmm(minutosDoDia(a.inicio))}, ${esc(p?.nome)}, ${esc(s?.nome)}, ${STATUS_AG[a.status]}">
+    <span class="b-l1"><span class="num">${hhmm(minutosDoDia(a.inicio))}</span><b>${esc(nomeCurto(p?.nome || 'Paciente'))}</b>${p?.alerta ? `<i class="b-alerta" title="${esc(p.alerta)}"></i>` : ''}</span>
+    ${curto ? '' : `<span class="b-l2"><span class="mono">${esc(s?.sigla || '—')}</span>${esc(STATUS_AG[a.status])}</span>`}
+  </button>`;
+}
+
+function telaAgenda(el) {
+  const d = D();
+  const q = new URLSearchParams(location.hash.split('?')[1] || '');
+  const hojeK = chaveDia(new Date());
+  const k = /^\d{4}-\d{2}-\d{2}$/.test(q.get('dia') || '') ? q.get('dia') : hojeK;
+  const dia = dataDaChave(k);
+  const lista = agendaDoDia(k);
+  const { abre, fecha } = d.agendaHoras;
+  const altura = (fecha - abre) * 60 * PX_MIN;
+  const semConf = lista.filter((a) => a.status === 'agendado').length;
+  const ehHoje = k === hojeK;
+  const desloca = (n) => { const x = new Date(dia); x.setDate(x.getDate() + n); return chaveDia(x); };
+  const seg = new Date(dia); seg.setDate(seg.getDate() - ((seg.getDay() + 6) % 7));
+  const semana = Array.from({ length: 6 }, (_, i) => { const x = new Date(seg); x.setDate(x.getDate() + i); return x; });
+  const conta = (s) => lista.filter((a) => a.status === s).length;
+
+  el.innerHTML = `
+    <div class="cab">
+      <div>
+        <h1>Agenda</h1>
+        <div class="meta">${esc(dia.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }))}${ehHoje ? ' · hoje' : ''} · ${plural(lista.length, 'horário', 'horários')}${semConf ? ` · <span class="atrasada">${semConf} sem confirmação</span>` : ''}</div>
+      </div>
+      <div class="acoes">
+        <div class="nav-dia" role="group" aria-label="Escolher dia">
+          <a class="btn icone" href="#/?dia=${desloca(-1)}" aria-label="Dia anterior"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg></a>
+          <a class="btn" href="#/"${ehHoje ? ' aria-current="date"' : ''}>Hoje</a>
+          <a class="btn icone" href="#/?dia=${desloca(1)}" aria-label="Próximo dia"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
+        </div>
+        <input type="date" id="ir-dia" value="${k}" aria-label="Ir para a data" class="data-agenda">
+        <button class="btn acento" id="novo-ag">+ Novo agendamento</button>
+      </div>
+    </div>
+    <div class="semana">
+      ${semana.map((x) => { const kk = chaveDia(x); const n = agendaDoDia(kk).length; return `
+        <a class="dia-sem${kk === k ? ' ativo' : ''}${kk === hojeK ? ' hoje' : ''}" href="#/?dia=${kk}"${kk === k ? ' aria-current="date"' : ''}>
+          <span>${x.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')}</span><b class="num">${pad(x.getDate())}</b><i>${n ? plural(n, 'horário', 'horários') : 'livre'}</i>
+        </a>`; }).join('')}
+    </div>
+    <div class="legenda" aria-label="Resumo por status">
+      ${['confirmado', 'agendado', 'na-recepcao', 'em-atendimento', 'finalizado', 'faltou'].map((s) => `<span class="leg ag-${s}"><i></i>${STATUS_AG[s]}<b class="num">${conta(s)}</b></span>`).join('')}
+    </div>
+    <div class="agenda-wrap">
+      <div class="grade-agenda" style="--colunas:${d.recursos.length}">
+        <div class="regua" aria-hidden="true"><div class="col-cab vazio-cab"></div><div class="regua-trilho" style="height:${altura}px">
+          ${Array.from({ length: fecha - abre + 1 }, (_, i) => `<span style="top:${i * 60 * PX_MIN}px">${pad(abre + i)}:00</span>`).join('')}
+        </div></div>
+        ${d.recursos.map((r, ri) => { const doR = lista.filter((a) => a.recurso === r.id); return `
+          <section class="coluna-ag" aria-label="${esc(r.nome)}">
+            <header class="col-cab"><span class="iniciais-sm">${esc(iniciais(r.nome.replace(/^Dra?\.\s/, '')))}</span><span class="col-txt"><b>${esc(r.nome)}</b><small>${esc(r.sub)}</small></span><span class="num col-n">${doR.length}</span></header>
+            <div class="trilho" data-recurso="${r.id}" style="height:${altura}px" title="Clique num horário vazio para agendar">
+              ${ehHoje ? `<div class="agora${ri === 0 ? ' com-hora' : ''}" aria-hidden="true"><span class="num"></span></div>` : ''}
+              ${doR.map(blocoAgenda).join('')}
+            </div>
+          </section>`; }).join('')}
+      </div>
+    </div>
+    ${lista.length === 0 ? `<p class="aviso info" style="margin-top:16px">Nenhum horário marcado neste dia. Clique num horário vazio da coluna para agendar.</p>` : ''}`;
+
+  $('#ir-dia', el).onchange = (e) => { if (e.target.value) location.hash = `#/?dia=${e.target.value}`; };
+  $('#novo-ag', el).onclick = () => modalAgendamento({ dia: k });
+
+  // Linha do "agora", atualizada a cada minuto
+  const posicionarAgora = () => {
+    const agora = new Date(); const min = agora.getHours() * 60 + agora.getMinutes();
+    $$('.agora', el).forEach((l) => {
+      const dentro = min >= abre * 60 && min <= fecha * 60;
+      l.hidden = !dentro;
+      l.style.top = `${(min - abre * 60) * PX_MIN}px`;
+      const r = $('span', l); if (r) r.textContent = hhmm(min);
+    });
+  };
+  if (ehHoje) {
+    posicionarAgora();
+    clearInterval(window.__agora); window.__agora = setInterval(() => (el.isConnected ? posicionarAgora() : clearInterval(window.__agora)), 30000);
+    // Rola até perto da hora atual na primeira abertura
+    if (ultimaTela !== location.hash.replace(/^#\/?/, '').split('?')[0]) {
+      const min = new Date().getHours() * 60 - abre * 60 - 60;
+      requestAnimationFrame(() => { const w = $('.agenda-wrap', el); if (w && min > 0 && new Date().getHours() < fecha) w.scrollTop = min * PX_MIN; });
+    }
+  }
+
+  // Abrir horário / agendar no vazio
+  $$('.bloco', el).forEach((b) => b.addEventListener('click', () => abrirHorario(b.dataset.ag)));
+  $$('.trilho', el).forEach((t) => t.addEventListener('click', (e) => {
+    if (e.target !== t) return;
+    const y = e.clientY - t.getBoundingClientRect().top;
+    const min = abre * 60 + Math.floor(y / PX_MIN / 15) * 15;
+    modalAgendamento({ dia: k, recurso: t.dataset.recurso, min });
+  }));
+
+  // Arrastar para remarcar (troca hora e, se o exame permitir, a coluna)
+  let arrastando = null; let pegada = 0;
+  $$('.bloco', el).forEach((b) => {
+    b.addEventListener('dragstart', (e) => {
+      arrastando = b.dataset.ag; pegada = e.clientY - b.getBoundingClientRect().top;
+      e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', arrastando);
+      requestAnimationFrame(() => b.classList.add('arrastando'));
+    });
+    b.addEventListener('dragend', () => { b.classList.remove('arrastando'); $$('.trilho', el).forEach((t) => t.classList.remove('alvo')); $$('.fantasma', el).forEach((f) => f.remove()); });
+  });
+  $$('.trilho', el).forEach((t) => {
+    t.addEventListener('dragover', (e) => {
+      e.preventDefault(); t.classList.add('alvo');
+      const a = D().agendamentos.find((x) => x.id === arrastando); if (!a) return;
+      const min = abre * 60 + Math.round((e.clientY - t.getBoundingClientRect().top - pegada) / PX_MIN / 15) * 15;
+      let f = $('.fantasma', t);
+      if (!f) { $$('.fantasma', el).forEach((x) => x.remove()); f = document.createElement('div'); f.className = 'fantasma'; t.append(f); }
+      f.style.top = `${(min - abre * 60) * PX_MIN}px`; f.style.height = `${a.duracao * PX_MIN - 3}px`; f.textContent = hhmm(Math.max(abre * 60, min));
+    });
+    t.addEventListener('dragleave', (e) => { if (!t.contains(e.relatedTarget)) { t.classList.remove('alvo'); $('.fantasma', t)?.remove(); } });
+    t.addEventListener('drop', (e) => {
+      e.preventDefault(); t.classList.remove('alvo'); $('.fantasma', t)?.remove();
+      const a = D().agendamentos.find((x) => x.id === (e.dataTransfer.getData('text/plain') || arrastando)); if (!a) return;
+      let min = abre * 60 + Math.round((e.clientY - t.getBoundingClientRect().top - pegada) / PX_MIN / 15) * 15;
+      min = Math.max(abre * 60, Math.min(fecha * 60 - a.duracao, min));
+      remarcar(a, k, min, t.dataset.recurso);
+    });
+  });
+}
+
+function remarcar(a, k, min, recursoId) {
+  const s = servico(a.servicoId); const r = recurso(recursoId);
+  if (s && !r.servicos.includes(s.id)) { toast(`${s.sigla}: só com ${recurso(recursoPara(s.id)).nome}.`, { erro: true }); return false; }
+  const c = conflito(recursoId, k, min, a.duracao, a.id);
+  if (c) { toast(`Conflito com ${nomeCurto(paciente(c.pacienteId)?.nome)} às ${hhmm(minutosDoDia(c.inicio))}.`, { erro: true }); return false; }
+  const antes = { inicio: a.inicio, recurso: a.recurso, status: a.status };
+  if (antes.inicio === isoDe(k, min) && antes.recurso === recursoId) return false;
+  a.inicio = isoDe(k, min); a.recurso = recursoId;
+  if (['faltou', 'na-recepcao'].includes(a.status)) a.status = 'agendado';
+  salvar(); comTransicao(render);
+  toast(`Remarcado para ${diaPorExtenso(k)} às ${hhmm(min)}`, { desfazer: () => { Object.assign(a, antes); salvar(); comTransicao(render); } });
+  return true;
+}
+
+/* --------------------------------------------------- gaveta: detalhe do horário */
+function abrirHorario(id) {
+  const a = D().agendamentos.find((x) => x.id === id); if (!a) return;
+  const p = paciente(a.pacienteId); const s = servico(a.servicoId); const r = recurso(a.recurso);
+  const k = chaveDia(a.inicio); const ini = minutosDoDia(a.inicio);
+  const passo = FLUXO_AG.indexOf(a.status);
+  const proximo = {
+    agendado: ['confirmado', 'Marcar como confirmado'], confirmado: ['na-recepcao', 'Paciente chegou'],
+    'na-recepcao': ['em-atendimento', 'Iniciar atendimento'], 'em-atendimento': ['finalizado', 'Finalizar atendimento'],
+  }[a.status];
+  const wa = soDigitos(p?.telefone);
+  const msg = `Olá, ${p?.nome.split(' ')[0]}! Confirmando ${s?.categoria === 'Consulta' ? 'sua consulta' : 'seu exame'} de ${s?.nome || 'atendimento'} na ${D().settings.nome}: ${diaPorExtenso(k)}, às ${hhmm(ini)}.${s?.preparo ? `\n\nPreparo: ${s.preparo}` : ''}\n\nEndereço: ${D().settings.endereco}. Responda SIM para confirmar.`;
+  abrirCamada(`
+    <div class="gaveta-cab">
+      <span class="status-ag ag-${a.status}"><i></i>${STATUS_AG[a.status]}</span>
+      <button type="button" class="icone-btn" data-fechar aria-label="Fechar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+    <div class="gaveta-corpo">
+      <p class="rotulo">${esc(diaPorExtenso(k))} · <span class="num">${hhmm(ini)}–${hhmm(ini + a.duracao)}</span></p>
+      <h2>${esc(p?.nome || 'Paciente')}</h2>
+      <p class="small muted" style="margin:0">${esc(p?.convenio || '')}${p?.telefone ? ` · <span class="num">${esc(p.telefone)}</span>` : ' · <span class="atrasada">sem telefone</span>'} · <a href="#/pacientes/${p?.id}" class="link-sub">Abrir ficha</a></p>
+      ${p?.alerta ? `<p style="margin:12px 0 0"><span class="alerta-clinico">${esc(p.alerta)}</span></p>` : ''}
+      <div class="painel" style="margin-top:18px">
+        <div class="par"><span>Exame ou consulta</span><span><span class="mono sigla-mini">${esc(s?.sigla || '—')}</span> ${esc(s?.nome || '—')}</span></div>
+        <div class="par"><span>Com</span><span>${esc(r?.nome)}</span></div>
+        <div class="par"><span>Duração</span><b>${a.duracao} min</b></div>
+        ${s?.preparo ? `<p class="small muted" style="margin:10px 0 0;line-height:1.5"><b style="color:var(--text)">Preparo:</b> ${esc(s.preparo)}</p>` : ''}
+      </div>
+      <ol class="fluxo" aria-label="Andamento do atendimento">
+        ${FLUXO_AG.map((f, i) => `<li class="${a.status === 'faltou' ? '' : i < passo ? 'feito' : i === passo ? 'atual' : ''}"><i></i>${STATUS_AG[f]}</li>`).join('')}
+      </ol>
+      <div class="gaveta-acoes">
+        ${a.status === 'agendado' && wa.length >= 10 ? `<a class="btn acento" id="g-wa" href="https://wa.me/55${wa}?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener">Confirmar por WhatsApp</a>` : ''}
+        ${proximo ? `<button class="btn ${a.status === 'agendado' && wa.length >= 10 ? '' : 'acento'}" id="g-prox">${proximo[1]}</button>` : ''}
+        ${a.status === 'finalizado' ? '<p class="small muted" style="margin:0">Atendimento finalizado.</p>' : ''}
+        ${a.status === 'faltou' ? '<p class="small muted" style="margin:0">Paciente faltou. Remarque abaixo ou registre na jornada.</p>' : ''}
+      </div>
+      <details class="remarcar"${a.status === 'faltou' ? ' open' : ''}>
+        <summary>Remarcar</summary>
+        <form id="g-rem" class="form-grade" style="margin-top:12px">
+          <label class="campo">Data<input type="date" name="dia" value="${k}"></label>
+          <label class="campo">Com<select name="recurso">${D().recursos.filter((x) => !s || x.servicos.includes(s.id)).map((x) => `<option value="${x.id}" ${x.id === a.recurso ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select></label>
+          <div class="inteiro"><span class="rotulo">Horários livres</span><div class="chips-livres" id="g-livres"></div></div>
+        </form>
+      </details>
+      <label class="campo" style="margin-top:16px">Observação do horário<textarea id="g-obs" rows="2" placeholder="Ex.: vem acompanhado da filha">${esc(a.obs)}</textarea></label>
+      ${a.jornadaId && jornada(a.jornadaId) ? `<a class="linha-link" href="#/jornada/${a.jornadaId}">Ver a jornada deste paciente <span>→</span></a>` : ''}
+    </div>
+    <div class="gaveta-rodape">
+      ${!['finalizado', 'faltou'].includes(a.status) ? '<button class="btn fantasma" id="g-faltou">Faltou</button>' : ''}
+      <button class="btn fantasma perigo" id="g-cancelar">Cancelar horário</button>
+    </div>`, {
+    classe: 'gaveta',
+    aoAbrir: (m, fechar) => {
+      $('[data-fechar]', m).onclick = fechar;
+      const mudar = (status, texto) => {
+        const antes = a.status; a.status = status; salvar();
+        if (a.jornadaId && status === 'finalizado') {
+          const j = jornada(a.jornadaId);
+          j?.historico.push({ id: db.novoId('h'), tipo: 'consulta', texto: `Atendimento realizado (agenda): ${s?.nome || ''}.`, em: new Date().toISOString() });
+          salvar();
+        }
+        fechar(); comTransicao(render);
+        toast(texto, { desfazer: () => { a.status = antes; salvar(); render(); } });
+      };
+      $('#g-wa', m)?.addEventListener('click', () => setTimeout(() => mudar('confirmado', 'Confirmação enviada e horário confirmado'), 150));
+      $('#g-prox', m)?.addEventListener('click', () => mudar(proximo[0], `${nomeCurto(p?.nome)}: ${STATUS_AG[proximo[0]].toLowerCase()}`));
+      $('#g-faltou', m)?.addEventListener('click', () => mudar('faltou', `${nomeCurto(p?.nome)} marcado como faltou`));
+      $('#g-cancelar', m).onclick = () => {
+        const lista = D().agendamentos; const pos = lista.indexOf(a);
+        lista.splice(pos, 1); salvar(); fechar(); comTransicao(render);
+        toast('Horário cancelado', { desfazer: () => { lista.splice(pos, 0, a); salvar(); render(); } });
+      };
+      $('#g-obs', m).addEventListener('change', (e) => { a.obs = e.target.value.trim(); salvar(); toast('Observação salva'); });
+      const f = $('#g-rem', m);
+      const desenharLivres = () => {
+        const kk = f.dia.value; const l = kk ? livres(f.recurso.value, kk, a.duracao, a.id, 12) : [];
+        $('#g-livres', m).innerHTML = l.length ? l.map((mm) => `<button type="button" class="chip" data-min="${mm}">${hhmm(mm)}</button>`).join('') : '<span class="small muted">Sem horário livre neste dia.</span>';
+        $$('[data-min]', m).forEach((b) => (b.onclick = () => {
+          fechar();
+          const naTela = new URLSearchParams(location.hash.split('?')[1] || '').get('dia') || chaveDia(new Date());
+          if (remarcar(a, kk, Number(b.dataset.min), f.recurso.value) && (kk !== naTela || location.hash.split('?')[0] !== '#/')) location.hash = `#/?dia=${kk}`;
+        }));
+      };
+      f.addEventListener('change', desenharLivres); desenharLivres();
+    },
+  });
+}
+
+/* ------------------------------------------------------ modal: novo agendamento */
+function modalAgendamento({ pacienteId, servicoId, jornadaId, recurso: rId, dia, min } = {}) {
+  const d = D();
+  const pre = pacienteId ? paciente(pacienteId) : null;
+  const k0 = dia || chaveDia(new Date());
+  const sv0 = servicoId || (rId ? recurso(rId).servicos[0] : 's1');
+  const ativos = d.servicos.filter((s) => !['arquivado', 'pausado'].includes(s.status) || s.id === sv0);
+  abrirCamada(`
+    <h2>Novo agendamento</h2>
+    <form id="f-ag" style="display:grid;gap:12px" novalidate>
+      <label class="campo">Paciente <span class="ajuda">Nome de um paciente cadastrado ou novo.</span>
+        <input type="text" name="nome" value="${esc(pre?.nome)}" autocomplete="off" ${pre ? 'readonly' : ''}></label>
+      <div class="sugestoes" id="sug-ag" hidden></div>
+      <label class="campo" id="campo-tel" ${pre ? 'hidden' : ''}>Telefone (WhatsApp)<input type="tel" name="telefone" placeholder="(41) 99999-0000"></label>
+      <div class="form-grade">
+        <label class="campo">Exame ou consulta<select name="servico">${ativos.map((s) => `<option value="${s.id}" ${s.id === sv0 ? 'selected' : ''}>${esc(s.sigla)} · ${esc(s.nome)}</option>`).join('')}</select></label>
+        <label class="campo">Com<select name="recurso"></select></label>
+        <label class="campo">Data<input type="date" name="dia" value="${k0}"></label>
+        <label class="campo">Duração (min)<input type="number" name="duracao" min="10" step="5"></label>
+      </div>
+      <div><span class="rotulo">Horário</span><div class="chips-livres" id="ag-livres"></div><input type="hidden" name="min" value="${min ?? ''}"></div>
+      <label class="campo">Observação<input type="text" name="obs" placeholder="Ex.: trazer exames anteriores"></label>
+      <p class="aviso erro" id="ag-erro" hidden></p>
+      <div class="acoes"><button type="button" class="btn fantasma" data-fechar>Cancelar</button><button class="btn acento">Agendar</button></div>
+    </form>`, {
+    aoAbrir: (m, fechar) => {
+      const f = $('#f-ag', m); let escolhido = pre;
+      $('[data-fechar]', m).onclick = fechar;
+      const preencherRecursos = (manter) => {
+        const ok = d.recursos.filter((r) => r.servicos.includes(f.servico.value));
+        f.recurso.innerHTML = ok.map((r) => `<option value="${r.id}">${esc(r.nome)}</option>`).join('');
+        if (manter && ok.some((r) => r.id === manter)) f.recurso.value = manter;
+        f.duracao.value = servico(f.servico.value)?.duracao || 30;
+      };
+      const desenharLivres = () => {
+        const dur = Number(f.duracao.value) || 30;
+        const l = f.dia.value ? livres(f.recurso.value, f.dia.value, dur, null, 40) : [];
+        const atual = f.min.value === '' ? null : Number(f.min.value);
+        if (atual !== null && !l.includes(atual) && !conflito(f.recurso.value, f.dia.value, atual, dur)) l.unshift(atual);
+        $('#ag-livres', m).innerHTML = l.length ? l.sort((x, y) => x - y).map((mm) => `<button type="button" class="chip" data-min="${mm}" aria-pressed="${mm === atual}">${hhmm(mm)}</button>`).join('') : '<span class="small muted">Sem horário livre neste dia para este exame.</span>';
+        $$('[data-min]', m).forEach((b) => (b.onclick = () => { f.min.value = b.dataset.min; $$('[data-min]', m).forEach((x) => x.setAttribute('aria-pressed', String(x === b))); }));
+      };
+      preencherRecursos(rId); desenharLivres();
+      f.servico.onchange = () => { preencherRecursos(f.recurso.value); desenharLivres(); };
+      f.recurso.onchange = desenharLivres; f.dia.onchange = () => { f.min.value = ''; desenharLivres(); }; f.duracao.oninput = desenharLivres;
+      if (!pre) {
+        f.nome.focus();
+        f.nome.oninput = () => {
+          escolhido = null; $('#campo-tel', m).hidden = false;
+          const q = f.nome.value.trim().toLowerCase();
+          const achados = q.length < 2 ? [] : d.pacientes.filter((p) => p.nome.toLowerCase().includes(q)).slice(0, 5);
+          const sug = $('#sug-ag', m); sug.hidden = !achados.length;
+          sug.innerHTML = achados.map((p) => `<button type="button" data-p="${p.id}">${esc(p.nome)} <span class="muted small">${esc(p.convenio)}</span></button>`).join('');
+          $$('[data-p]', sug).forEach((b) => (b.onclick = () => { escolhido = paciente(b.dataset.p); f.nome.value = escolhido.nome; sug.hidden = true; $('#campo-tel', m).hidden = true; }));
+        };
+      }
+      f.onsubmit = (e) => {
+        e.preventDefault();
+        const erro = $('#ag-erro', m); const falha = (t) => { erro.textContent = t; erro.hidden = false; };
+        if (!f.nome.value.trim()) return falha('Informe o paciente.');
+        if (!escolhido && soDigitos(f.telefone.value).length < 10) return falha('Paciente novo: informe o telefone com DDD para a confirmação.');
+        if (f.min.value === '') return falha('Escolha um horário.');
+        const dur = Number(f.duracao.value) || 30; const mm = Number(f.min.value);
+        const c = conflito(f.recurso.value, f.dia.value, mm, dur);
+        if (c) return falha(`Esse horário bate com ${nomeCurto(paciente(c.pacienteId)?.nome)} às ${hhmm(minutosDoDia(c.inicio))}.`);
+        let p = escolhido; const agora = new Date().toISOString();
+        if (!p) {
+          p = { id: db.novoId('p'), nome: f.nome.value.trim(), telefone: f.telefone.value.trim(), email: '', nascimento: '', convenio: 'Particular', origem: 'Telefone', riscos: [], medicacoes: '', alergias: '', alerta: '', medida: null, obs: '', criado: agora };
+          d.pacientes.push(p);
+        }
+        const j = jornadaId ? jornada(jornadaId) : d.jornadas.find((x) => x.pacienteId === p.id && ['novo', 'consulta'].includes(x.etapa));
+        const a = { id: db.novoId('a'), recurso: f.recurso.value, pacienteId: p.id, servicoId: f.servico.value, inicio: isoDe(f.dia.value, mm), duracao: dur, status: 'agendado', obs: f.obs.value.trim(), jornadaId: j?.id || null };
+        d.agendamentos.push(a);
+        if (j) {
+          j.historico.push({ id: db.novoId('h'), tipo: 'sistema', texto: `Horário marcado: ${servico(a.servicoId)?.nome}, ${diaPorExtenso(f.dia.value)} às ${hhmm(mm)}.`, em: agora });
+          if (j.etapa === 'novo') { j.etapa = 'consulta'; j.etapaDesde = agora; }
+        }
+        salvar(); fechar();
+        toast(`Agendado: ${diaPorExtenso(f.dia.value)} às ${hhmm(mm)}`);
+        const destino = `#/?dia=${f.dia.value}`;
+        if (location.hash !== destino) location.hash = destino; else comTransicao(render);
+      };
+    },
+  });
+}
+
 /* ------------------------------------------------------- busca rápida (Ctrl+K) */
 function abrirBusca() {
   if ($('.paleta')) return;
   const acoes = [
+    ['Novo agendamento', () => modalAgendamento({})], ['Abrir a agenda de hoje', '#/'], ['Resumo do dia', '#/hoje'],
     ['Abrir a jornada do paciente', '#/jornada'], ['Nova jornada', () => modalNovaJornada()], ['Cadastrar paciente', '#/pacientes/novo'],
     ['Cadastrar exame ou consulta', '#/servicos/novo'], ['Divulgação (Doctoralia e Google)', '#/divulgacao'], ['Dados do consultório', '#/consultorio'],
   ];
@@ -1228,6 +1618,7 @@ function abrirBusca() {
   });
 }
 $('#abrir-busca').onclick = abrirBusca;
+$('#abrir-busca-cel').onclick = abrirBusca;
 document.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && entrou()) { e.preventDefault(); const p = $('.paleta'); if (p) p.parentElement.remove(); else abrirBusca(); }
 });

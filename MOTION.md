@@ -41,3 +41,4 @@ Sensação: precisa, calma, cara.
 - View Transitions API: troca de tela, mudança de etapa na Jornada
 - Escalonamento de linhas por CSS (`--i`): listas e tabelas
 - Barra de tempo por transform scaleX: toast com desfazer
+- Agenda (tema clínico claro): gaveta lateral desliza da direita (`gaveta-entra`/`gaveta-sai`); blocos viajam ao remarcar ou mudar status (View Transitions, `view-transition-name: ag-<id>`); fantasma tracejado mostra o horário durante o arrasto; linha do "agora" desliza a cada 30 s; barra da seção ativa no menu lateral cresce ao entrar.
