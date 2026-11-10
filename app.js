@@ -80,19 +80,65 @@ function tiraECG(largura, base, intervalo, escala = 1, inicio = 10) {
 }
 const svgECG = (w, h, base, intervalo, escala, cls = '') => `<svg class="${cls}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><path d="${tiraECG(w, base, intervalo, escala)}"/></svg>`;
 
+/* ------------------------------------------------------- movimento (MOTION.md) */
+const reduz = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+// Troca de tela e de etapa com View Transitions, quando o navegador tem; senão, troca direto.
+function comTransicao(fn) {
+  if (!document.startViewTransition || reduz() || document.hidden) return fn();
+  try { document.startViewTransition(fn); } catch { fn(); }
+}
+// Números "leem" até o valor, como num monitor.
+function contar(raiz) {
+  $$('[data-conta]', raiz).forEach((el) => {
+    const alvo = Number(el.dataset.conta) || 0;
+    const fmt = el.dataset.formato === 'brl' ? brl : (n) => String(Math.round(n));
+    if (reduz() || alvo === 0) { el.textContent = fmt(alvo); return; }
+    const dur = 700; const t0 = performance.now();
+    const passo = (t) => {
+      const p = Math.min(1, (t - t0) / dur);
+      const e = 1 - Math.pow(1 - p, 4);
+      el.textContent = fmt(alvo * e);
+      if (p < 1) requestAnimationFrame(passo); else el.textContent = fmt(alvo);
+    };
+    el.textContent = fmt(0);
+    requestAnimationFrame(passo);
+  });
+}
+// Linhas de lista e tabela assentam em sequência quando a tela abre (no máximo 10).
+function escalonar(raiz) {
+  $$('.lista, tbody, .historico', raiz).forEach((lista) => {
+    lista.classList.add('escalona');
+    [...lista.children].forEach((li, i) => li.style.setProperty('--i', Math.min(i, 10)));
+  });
+}
+// Mede o comprimento de cada traço para ele se desenhar de ponta a ponta.
+function prepararTracos(raiz) {
+  $$('.varredura .vivo, .sinais .ecg path', raiz).forEach((p) => {
+    try { p.style.setProperty('--comp', Math.ceil(p.getTotalLength())); } catch { /* sem SVG medido */ }
+  });
+}
+
 /* ----------------------------------------------------------------- avisos (toast) */
 function toast(texto, { desfazer, erro } = {}) {
   const el = document.createElement('div');
   el.className = `toast${erro ? ' erro' : ''}`;
   el.innerHTML = `<span>${esc(texto)}</span>`;
+  const tempo = desfazer ? 6000 : 3200;
+  const sair = () => { if (!el.isConnected) return; el.classList.add('saindo'); setTimeout(() => el.remove(), 220); };
   if (desfazer) {
     const b = document.createElement('button');
     b.textContent = 'Desfazer';
-    b.onclick = () => { desfazer(); el.remove(); };
+    b.onclick = () => { desfazer(); sair(); };
     el.append(b);
+    const barra = document.createElement('span');
+    barra.className = 'tempo';
+    barra.style.setProperty('--dur-toast', `${tempo}ms`);
+    el.append(barra);
   }
-  $('#toasts').append(el);
-  setTimeout(() => el.remove(), desfazer ? 6000 : 3200);
+  const pilha = $('#toasts');
+  while (pilha.children.length >= 3) pilha.firstElementChild.remove();
+  pilha.append(el);
+  setTimeout(sair, tempo);
 }
 
 /* ------------------------------------------------------------------- camadas */
@@ -126,7 +172,12 @@ function moverTraco() {
   if (!ativa) { $('#traco-path').setAttribute('d', `M0,13 L${w},13`); return; }
   const cx = ativa.offsetLeft + ativa.offsetWidth / 2;
   const x0 = cx - 17 * 0.9;
-  $('#traco-path').setAttribute('d', `M${ativa.offsetLeft},13 L${x0},13 ${batida(x0, 13, 0.9)} L${ativa.offsetLeft + ativa.offsetWidth},13`);
+  const d = `M${ativa.offsetLeft},13 L${x0},13 ${batida(x0, 13, 0.9)} L${ativa.offsetLeft + ativa.offsetWidth},13`;
+  const path = $('#traco-path');
+  if (path.getAttribute('d') === d) return;
+  path.setAttribute('d', d);
+  // A batida se redesenha embaixo da aba nova
+  traco.classList.remove('bate'); void traco.getBoundingClientRect(); traco.classList.add('bate');
 }
 window.addEventListener('resize', moverTraco);
 
@@ -188,6 +239,7 @@ const rotas = [
   [/^orcamento\/(.+)$/, telaOrcamento],
 ];
 let saindoComAlteracoes = null;
+let ultimaTela = null; // re-render da mesma tela (salvar, marcar) não repete as entradas
 function render() {
   if (!entrou()) return telaEntrada();
   $('#topo').hidden = false;
@@ -203,9 +255,14 @@ function render() {
     if (m) {
       view.innerHTML = '';
       const wrap = document.createElement('div');
-      wrap.className = 'entrada';
       view.append(wrap);
       fn(wrap, ...m.slice(1));
+      if (caminho !== ultimaTela) { escalonar(wrap); contar(wrap); } else {
+        wrap.classList.add('sem-entrada');
+        $$('[data-conta]', wrap).forEach((e) => (e.textContent = e.dataset.formato === 'brl' ? brl(e.dataset.conta) : e.dataset.conta));
+      }
+      prepararTracos(wrap);
+      ultimaTela = caminho;
       document.title = `${$('h1', wrap)?.textContent?.trim() || 'Painel'} · ${D().settings.nome}`;
       return;
     }
@@ -218,8 +275,7 @@ window.addEventListener('hashchange', () => {
     history.replaceState(null, '', hashAnterior); return;
   }
   hashAnterior = location.hash;
-  window.scrollTo(0, 0);
-  render();
+  comTransicao(() => { window.scrollTo(0, 0); render(); });
 });
 window.addEventListener('beforeunload', (e) => { if (saindoComAlteracoes) { e.preventDefault(); e.returnValue = ''; } });
 
@@ -274,13 +330,24 @@ function telaHoje(el) {
       </div>
       <div class="acoes"><button class="btn" data-nova-jornada>+ Nova jornada</button></div>
     </div>
-    <dl class="numeros">
-      <a href="#/jornada"><dt>Novos contatos</dt><dd>${novos.length}</dd></a>
-      <a href="#/jornada"><dt>Em jornada</dt><dd>${abertas.length}</dd></a>
-      <a href="#/jornada?ver=fechadas"><dt>Concluídas em 30 dias</dt><dd>${concluidasMes}</dd></a>
-      <a href="#/jornada"><dt>Orçamentos em aberto</dt><dd>${brl(emAberto)}</dd></a>
-      <a href="#/jornada"><dt>Média na jornada</dt><dd>${media}<small>${media === 1 ? 'dia' : 'dias'}</small></dd></a>
-    </dl>
+    <section class="monitor" aria-label="Resumo do consultório hoje">
+      <div class="monitor-cab">
+        <span class="vivo" aria-hidden="true"></span>
+        <span class="rotulo">Pulso do consultório · <b>${plural(abertas.length, 'paciente', 'pacientes')} em jornada</b></span>
+        <span class="relogio" id="relogio">${hora(new Date().toISOString())}</span>
+      </div>
+      <svg class="varredura" viewBox="0 0 1000 92" preserveAspectRatio="none" aria-hidden="true">
+        <path class="fundo" d="${tiraECG(1000, 58, 125, 2.3, 40)}"/>
+        <path class="vivo" d="${tiraECG(1000, 58, 125, 2.3, 40)}"/>
+      </svg>
+      <dl class="leituras">
+        <a class="leitura destaque" href="#/jornada"><dt>Novos contatos</dt><dd data-conta="${novos.length}">${novos.length}</dd><span class="nota">esperando resposta</span></a>
+        <a class="leitura" href="#/jornada"><dt>Em jornada</dt><dd data-conta="${abertas.length}">${abertas.length}</dd><span class="nota">do contato ao retorno</span></a>
+        <a class="leitura" href="#/jornada?ver=fechadas"><dt>Concluídas</dt><dd data-conta="${concluidasMes}">${concluidasMes}</dd><span class="nota">nos últimos 30 dias</span></a>
+        <a class="leitura" href="#/jornada"><dt>Orçamentos em aberto</dt><dd data-conta="${emAberto}" data-formato="brl">${brl(emAberto)}</dd><span class="nota">saldo a receber</span></a>
+        <a class="leitura" href="#/jornada"><dt>Média na jornada</dt><dd><span data-conta="${media}">${media}</span><small>${media === 1 ? 'dia' : 'dias'}</small></dd><span class="nota">desde o primeiro contato</span></a>
+      </dl>
+    </section>
     <div class="grade-home">
       <section aria-labelledby="h-atencao">
         <h2 class="secao" id="h-atencao">Precisa de atenção <span class="num">${lista.length}</span></h2>
@@ -315,13 +382,15 @@ function telaHoje(el) {
         </section>
         <section aria-labelledby="h-espaco">
           <h2 class="secao" id="h-espaco">Espaço dos laudos e pedidos</h2>
-          <div class="barra" role="progressbar" aria-valuenow="${Math.round(pct)}" aria-valuemin="0" aria-valuemax="100" aria-labelledby="h-espaco"><div style="width:${pct.toFixed(1)}%"></div></div>
+          <div class="barra" role="progressbar" aria-valuenow="${Math.round(pct)}" aria-valuemin="0" aria-valuemax="100" aria-labelledby="h-espaco"><div style="--p:${(pct / 100).toFixed(3)}"></div></div>
           <p class="small muted" style="margin:8px 0 0"><span class="num" style="color:var(--text-strong)">${(d.espaco.usado / 1048576).toFixed(0)} MB</span> de <span class="num">1 GB</span> · PDFs de laudo e fotos de pedido médico</p>
         </section>
       </div>
     </div>`;
   ligarTarefas(el);
   $('[data-nova-jornada]', el).onclick = () => modalNovaJornada();
+  clearInterval(window.__relogio);
+  window.__relogio = setInterval(() => { const r = $('#relogio'); if (r) r.textContent = hora(new Date().toISOString()); else clearInterval(window.__relogio); }, 20000);
 }
 
 function linhaTarefa(t, comRef) {
@@ -329,10 +398,10 @@ function linhaTarefa(t, comRef) {
   const p = j ? paciente(j.pacienteId) : t.pacienteId ? paciente(t.pacienteId) : null;
   const link = j ? `#/jornada/${j.id}` : p ? `#/pacientes/${p.id}` : '#/';
   const atr = atrasada(t.venceEm);
-  return `<li class="tarefa" data-tarefa="${t.id}">
+  return `<li class="tarefa${t.feita ? ' feita' : ''}" data-tarefa="${t.id}">
     <input type="checkbox" class="check" ${t.feita ? 'checked' : ''} aria-label="Concluir: ${esc(t.titulo)}">
     <a href="${link}" class="corpo" style="min-width:0;flex:1">
-      <span class="titulo" style="display:block;font-size:13px;font-weight:600;color:var(--text-strong)${t.feita ? ';text-decoration:line-through;color:var(--text-faint)' : ''}">${esc(t.titulo)}</span>
+      <span class="titulo" style="display:block;font-size:13px;font-weight:600;color:var(--text-strong)">${esc(t.titulo)}</span>
       <span class="sub" style="display:block;font-size:12px;color:var(--text-muted)"><span class="${atr && !t.feita ? 'atrasada' : ''}">${atr && !t.feita ? 'Atrasada · ' : ''}${quandoVence(t.venceEm)}</span>${comRef && p ? ` · ${esc(p.nome)}` : ''}</span>
     </a>
   </li>`;
@@ -343,10 +412,12 @@ function ligarTarefas(el, aoMudar) {
       const li = c.closest('[data-tarefa]');
       const t = D().tarefas.find((x) => x.id === li.dataset.tarefa);
       t.feita = c.checked; salvar();
+      li.classList.toggle('feita', c.checked);
       if (c.checked) {
-        li.style.transition = 'opacity 180ms'; li.style.opacity = '.35';
+        // O check se desenha, a linha risca e depois sai para o lado
         toast('Tarefa concluída', { desfazer: () => { t.feita = false; salvar(); render(); } });
-        setTimeout(() => (aoMudar ? aoMudar() : render()), 380);
+        setTimeout(() => li.classList.add('saindo'), reduz() ? 0 : 420);
+        setTimeout(() => (aoMudar ? aoMudar() : render()), reduz() ? 0 : 760);
       } else (aoMudar ? aoMudar() : render());
     };
   });
@@ -424,7 +495,7 @@ function cartaoJornada(j) {
   const prox = D().tarefas.filter((t) => t.jornadaId === j.id && !t.feita).sort((a, b) => a.venceEm.localeCompare(b.venceEm))[0];
   const dias = diasDesde(j.etapaDesde);
   const regua = Array.from({ length: 7 }, (_, i) => `<i class="${i < Math.min(7, Math.ceil(dias / 3)) ? 'on' : ''}"></i>`).join('');
-  return `<article class="cartao" draggable="true" tabindex="0" data-id="${j.id}" aria-label="${esc(p?.nome)}, ${ETAPA_NOME[j.etapa]}">
+  return `<article class="cartao" draggable="true" tabindex="0" data-id="${j.id}" style="view-transition-name:cartao-${esc(j.id)}" aria-label="${esc(p?.nome)}, ${ETAPA_NOME[j.etapa]}">
     <div style="display:flex;gap:8px;align-items:flex-start;justify-content:space-between">
       <span class="nome">${esc(p?.nome)}</span>
       ${j.orcamento ? `<span class="num small" style="color:var(--text-strong)">${saldo(j.orcamento) ? brl(saldo(j.orcamento)) : 'Convênio'}</span>` : ''}
@@ -443,9 +514,11 @@ function moverEtapa(id, etapa) {
   const antes = { etapa: j.etapa, etapaDesde: j.etapaDesde, hist: j.historico.length };
   j.etapa = etapa; j.etapaDesde = new Date().toISOString();
   j.historico.push({ id: db.novoId('h'), tipo: 'sistema', texto: `Movido para ${ETAPA_NOME[etapa]}.`, em: j.etapaDesde });
-  salvar(); render();
+  salvar();
+  // O cartão viaja até a coluna nova (View Transitions)
+  comTransicao(render);
   toast(`${paciente(j.pacienteId)?.nome.split(' ')[0]} foi para ${ETAPA_NOME[etapa]}`, {
-    desfazer: () => { j.etapa = antes.etapa; j.etapaDesde = antes.etapaDesde; j.historico.length = antes.hist; salvar(); render(); },
+    desfazer: () => { j.etapa = antes.etapa; j.etapaDesde = antes.etapaDesde; j.historico.length = antes.hist; salvar(); comTransicao(render); },
   });
 }
 
@@ -807,10 +880,10 @@ function telaPaciente(el, id) {
     </div>
     <div class="sinais" style="margin-bottom:24px">
       <div><span>PA</span><b class="${p.medida && paFora(p.medida.pa) ? 'fora' : ''}">${p.medida ? esc(p.medida.pa) : '—'}</b><em>mmHg</em></div>
-      <div><span>FC</span><b>${p.medida ? esc(p.medida.fc) : '—'}</b><em>bpm</em></div>
-      <div><span>Medida em</span><b style="font-size:16px">${p.medida ? dataCurta(p.medida.em) : '—'}</b><em>${p.medida ? tempoAtras(p.medida.em) : 'sem registro'}</em></div>
+      <div><span>FC</span><b>${p.medida?.fc ? `<span data-conta="${Number(p.medida.fc)}">${esc(p.medida.fc)}</span>` : '—'}</b><em>bpm</em></div>
+      <div><span>Medida em</span><b>${p.medida ? dataCurta(p.medida.em) : '—'}</b><em>${p.medida ? tempoAtras(p.medida.em) : 'sem registro'}</em></div>
       <div><span>Riscos</span><b>${p.riscos.length}</b><em>${p.riscos.length ? esc(p.riscos.slice(0, 2).join(', ')) + (p.riscos.length > 2 ? '…' : '') : 'nenhum marcado'}</em></div>
-      <div class="ecg">${svgECG(400, 34, 22, Math.max(70, Math.round(60000 / (p.medida?.fc || 75) / 8)), 0.9)}</div>
+      <div class="ecg" style="--dur-varre:${(5 * 60 / (Number(p.medida?.fc) || 75)).toFixed(2)}s" title="Traço ilustrativo no ritmo da última FC">${svgECG(400, 48, 32, 80, 1.5)}</div>
     </div>`}
     <div class="detalhe">
       <form id="f-pac" novalidate>
