@@ -323,9 +323,9 @@ function pendencias() {
 /* ============================================================ RESUMO DO DIA
    (feito com a skill dashboards-premium)
    Pergunta:   Novembro está no ritmo da meta do consultório?
-   Direção:    Clínico, no azul-petróleo do painel — a dona e a recepção olham no desktop, de manhã e entre pacientes.
-   Paleta:     branco-gelo #f3f6f6 / tinta #122023 / acento petróleo #0f5560 / contexto #b3c2c2 / verde #1f6b4a · vermelho #b42318
-   Tipografia: Instrument Serif (herói e manchete, "R$" menor) + Instrument Sans + IBM Plex Mono (datas, horas, deltas)
+   Direção:    Clínico em areia e vinho — a dona e a recepção olham no desktop, de manhã e entre pacientes.
+   Paleta:     areia #f1ebe3 / marfim #fffbf6 / tinta #2a1d1a / acento vinho #7a1f2b / detalhe dourado #b08a4a / contexto #c9b9a6 / verde #2f6b3f · vermelho #c4361c
+   Tipografia: Fraunces (herói e manchete, "R$" menor, em dourado) + Figtree (texto e números tabulares) + IBM Plex Mono (siglas e CID)
    Assinatura: a marca vermelha de "hoje" — na barra da meta, na faixa de horas e na linha do "agora" da agenda.
    Movimento:  editorial e tranquilo — manchete revela, herói conta, barra cresce, linha desenha, apoios em cascata (≤ 1,4 s, só na chegada).
    ========================================================================== */
@@ -463,6 +463,7 @@ function telaHoje(el) {
       </div>
     </header>
 
+    <div class="bento-topo">
     <section class="heroi" aria-label="Recebido no mês e meta">
       <div class="heroi-num">
         <p class="rotulo" id="heroi-rotulo">Recebido em ${esc(m.nome)}</p>
@@ -484,15 +485,16 @@ function telaHoje(el) {
           ${p.spark ? `<div class="apoio-spark" data-spark="${p.id}"></div>` : ''}
         </div>`).join('')}
     </section>
+    </div>
 
-    <section class="linha-dash">
-      <div class="bloco-dash ritmo">
-        <div class="bloco-cab"><h2>Ritmo do mês</h2><p>Recebido acumulado dia a dia, contra o mês anterior e a linha da meta</p></div>
-        <div id="g-ritmo"></div>
-      </div>
+    <section class="linha-dash bento-baixo">
       <div class="bloco-dash ranking">
         <div class="bloco-cab"><h2>O que mais se fez</h2><p>Exames e consultas realizados no mês</p></div>
         <div id="g-rank"></div>
+      </div>
+      <div class="bloco-dash ritmo">
+        <div class="bloco-cab"><h2>Ritmo do mês</h2><p>Recebido acumulado dia a dia, contra o mês anterior e a linha da meta</p></div>
+        <div id="g-ritmo"></div>
       </div>
     </section>
 
