@@ -10,6 +10,9 @@ const view = $('#view');
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtBRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const brl = (n) => fmtBRL.format(Number(n) || 0);
+const fmtBRL0 = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
+const brl0 = (n) => fmtBRL0.format(Math.round(Number(n) || 0));
+const formatarConta = (formato, n) => (formato === 'brl' ? brl(n) : formato === 'brl0' ? brl0(n) : String(Math.round(Number(n) || 0)));
 const dia = 86400000;
 const diasDesde = (iso) => Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / dia));
 const hojeISO = () => new Date().toISOString().slice(0, 10);
@@ -95,11 +98,12 @@ function comTransicao(fn) {
 function contar(raiz) {
   $$('[data-conta]', raiz).forEach((el) => {
     const alvo = Number(el.dataset.conta) || 0;
-    const fmt = el.dataset.formato === 'brl' ? brl : (n) => String(Math.round(n));
+    const fmt = (n) => formatarConta(el.dataset.formato, n);
     if (reduz() || alvo === 0) { el.textContent = fmt(alvo); return; }
     const dur = 700; const t0 = performance.now();
     const passo = (t) => {
-      const p = Math.min(1, (t - t0) / dur);
+      // O primeiro quadro pode vir com horário anterior a t0: sem limitar, a conta dava número negativo
+      const p = Math.min(1, Math.max(0, (t - t0) / dur));
       const e = 1 - Math.pow(1 - p, 4);
       el.textContent = fmt(alvo * e);
       if (p < 1) requestAnimationFrame(passo); else el.textContent = fmt(alvo);
@@ -261,7 +265,7 @@ function render() {
       fn(wrap, ...m.slice(1));
       if (caminho !== ultimaTela) { escalonar(wrap); contar(wrap); } else {
         wrap.classList.add('sem-entrada');
-        $$('[data-conta]', wrap).forEach((e) => (e.textContent = e.dataset.formato === 'brl' ? brl(e.dataset.conta) : e.dataset.conta));
+        $$('[data-conta]', wrap).forEach((e) => (e.textContent = formatarConta(e.dataset.formato, e.dataset.conta)));
       }
       prepararTracos(wrap);
       ultimaTela = caminho;
@@ -314,6 +318,47 @@ function pendencias() {
   return out.sort((a, b) => b.peso - a.peso);
 }
 
+/* ------------------------------------------- cards de números (Resumo do dia) */
+// Mesma estrutura do StatsCard: título, valor, variação com seta e cor, ícone com degradê, sobe ao passar o mouse.
+const ICONES_CARD = {
+  agenda: '<rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/>',
+  contato: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.1-5.5 6.5-5.5s5.9 1.9 6.5 5.5M19 8v6M16 11h6"/>',
+  dinheiro: '<rect x="2.5" y="6" width="19" height="13" rx="2.5"/><circle cx="12" cy="12.5" r="2.6"/><path d="M6 9.5v.01M18 15.5v.01"/>',
+  pulso: '<path d="M2.5 12h4l2-5 3.5 10 2.5-7 1.5 2h5.5"/>',
+};
+const SETAS = { sobe: '<path d="M7 17 17 7M9 7h8v8"/>', desce: '<path d="M7 7l10 10M17 9v8H9"/>', igual: '<path d="M5 12h14"/>' };
+function variacaoPct(atual, antes) { return antes ? ((atual - antes) / antes) * 100 : 0; }
+
+function cardsNumeros(d, agendaHoje) {
+  // Números do período anterior (a demonstração só guarda poucos dias de histórico)
+  const ind = { horariosSemanaPassada: 19, novos7Anteriores: 5, recebidoMesBase: 38950, recebidoMesAnterior: 44120, atendidosMesBase: 152, atendidosMesAnterior: 168, ...(d.indicadores || {}) };
+  const hoje = new Date();
+  const doMes = d.agendamentos.filter((a) => a.status === 'finalizado' && new Date(a.inicio).getMonth() === hoje.getMonth() && new Date(a.inicio).getFullYear() === hoje.getFullYear());
+  const recebido = ind.recebidoMesBase + doMes.reduce((t, a) => t + (servico(a.servicoId)?.preco || 0), 0);
+  const atendidos = ind.atendidosMesBase + doMes.length;
+  const novos7 = d.jornadas.filter((j) => diasDesde(j.criado) < 7).length;
+  return [
+    { titulo: 'Horários hoje', valor: agendaHoje.length, var: variacaoPct(agendaHoje.length, ind.horariosSemanaPassada), periodo: 'vs. semana passada', icone: 'agenda', tom: 'petroleo', href: '#/' },
+    { titulo: 'Novos contatos', valor: novos7, var: variacaoPct(novos7, ind.novos7Anteriores), periodo: 'vs. 7 dias anteriores', icone: 'contato', tom: 'teal', href: '#/pacientes?f=novos' },
+    { titulo: 'Recebido no mês', valor: recebido, formato: 'brl0', var: variacaoPct(recebido, ind.recebidoMesAnterior), periodo: 'vs. mês anterior', icone: 'dinheiro', tom: 'ambar', href: '#/hoje' },
+    { titulo: 'Atendidos no mês', valor: atendidos, var: variacaoPct(atendidos, ind.atendidosMesAnterior), periodo: 'vs. mês anterior', icone: 'pulso', tom: 'azul', href: '#/pacientes' },
+  ];
+}
+
+function cardNumero(c) {
+  const v = Math.round(c.var * 10) / 10;
+  const sentido = v > 0 ? 'sobe' : v < 0 ? 'desce' : 'igual';
+  const pct = `${v > 0 ? '+' : ''}${v.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`;
+  return `<a class="stat-card" href="${c.href}">
+    <div class="stat-txt">
+      <p class="stat-titulo">${esc(c.titulo)}</p>
+      <p class="stat-valor num"><span data-conta="${c.valor}"${c.formato ? ` data-formato="${c.formato}"` : ''}>${formatarConta(c.formato, c.valor)}</span></p>
+      <p class="stat-var ${sentido}"><svg viewBox="0 0 24 24" aria-hidden="true">${SETAS[sentido]}</svg><span class="num">${pct}</span><span class="stat-periodo">${esc(c.periodo)}</span></p>
+    </div>
+    <span class="stat-icone tom-${c.tom}" aria-hidden="true"><svg viewBox="0 0 24 24">${ICONES_CARD[c.icone]}</svg></span>
+  </a>`;
+}
+
 /* ---------------------------------------------------------------- tela: Hoje */
 function telaHoje(el) {
   const d = D();
@@ -349,13 +394,7 @@ function telaHoje(el) {
         <path class="fundo" d="${tiraECG(1000, 58, 125, 2.3, 40)}"/>
         <path class="vivo" d="${tiraECG(1000, 58, 125, 2.3, 40)}"/>
       </svg>
-      <dl class="leituras">
-        <a class="leitura destaque" href="#/pacientes?f=novos"><dt>Novos contatos</dt><dd data-conta="${novos.length}">${novos.length}</dd><span class="nota">esperando resposta</span></a>
-        <a class="leitura" href="#/pacientes?f=rascunho"><dt>Evoluções a assinar</dt><dd data-conta="${rascunhos.length}">${rascunhos.length}</dd><span class="nota">rascunhos no prontuário</span></a>
-        <a class="leitura" href="#/"><dt>Horários hoje</dt><dd data-conta="${agendaHoje.length}">${agendaHoje.length}</dd><span class="nota">${agendaHoje.filter((a) => a.status === 'finalizado').length} atendidos · ${agendaHoje.filter((a) => a.status === 'faltou').length} faltas</span></a>
-        <a class="leitura" href="#/pacientes"><dt>Orçamentos em aberto</dt><dd data-conta="${emAberto}" data-formato="brl">${brl(emAberto)}</dd><span class="nota">saldo a receber</span></a>
-        <a class="leitura" href="#/pacientes"><dt>Em acompanhamento</dt><dd data-conta="${abertas.length}">${abertas.length}</dd><span class="nota">do contato ao retorno</span></a>
-      </dl>
+      <div class="stats-grid">${cardsNumeros(d, agendaHoje).map(cardNumero).join('')}</div>
     </section>
     <div class="grade-home">
       <section aria-labelledby="h-atencao">

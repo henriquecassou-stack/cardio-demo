@@ -583,6 +583,34 @@ input.invalido { border-color: var(--alert); animation: treme 280ms var(--ease-s
 .folha table td { padding: 10px 0; }
 .folha footer { margin-top: 34px; padding-top: 14px; border-top: 1px solid var(--border); font-size: var(--t-xs); color: var(--text-muted); }
 
+/* ===================================== cards de números (Resumo do dia) */
+.stats-grid { position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; padding: 2px 16px 16px; }
+.stat-card { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-width: 0; padding: 18px 18px 16px; border: 1px solid var(--border); border-radius: var(--radius-lg);
+  background: rgba(255,255,255,.92); box-shadow: var(--sombra-1);
+  transition: transform 280ms cubic-bezier(.34, 1.4, .64, 1), box-shadow var(--dur-3) var(--ease-sai), border-color var(--dur-2); }
+.stat-card:hover { transform: translateY(-5px); box-shadow: var(--sombra-2); border-color: var(--border-strong); }
+.stat-card:active { transform: translateY(-2px); }
+.stat-txt { min-width: 0; }
+.stat-titulo { margin: 0; font-size: 13px; color: var(--text-muted); }
+.stat-valor { margin: 4px 0 0; font-size: 26px; line-height: 1.1; font-weight: 500; letter-spacing: -0.04em; color: var(--text-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat-var { margin: 8px 0 0; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; font-size: 12.5px; font-weight: 600; }
+.stat-var svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.stat-var.sobe { color: var(--ok); }
+.stat-var.desce { color: var(--alert); }
+.stat-var.igual { color: var(--text-faint); }
+.stat-periodo { font-weight: 400; color: var(--text-faint); margin-left: 2px; }
+.stat-icone { width: 46px; height: 46px; flex: none; display: grid; place-items: center; border-radius: 12px; color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 8px 16px -10px currentColor; transition: transform 280ms cubic-bezier(.34, 1.4, .64, 1); }
+.stat-card:hover .stat-icone { transform: rotate(-6deg) scale(1.05); }
+.stat-icone svg { width: 22px; height: 22px; fill: none; stroke: #fff; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.tom-petroleo { background: linear-gradient(135deg, #0f5560, #2f8a94); }
+.tom-teal { background: linear-gradient(135deg, #1b7266, #46a796); }
+.tom-ambar { background: linear-gradient(135deg, #9a5f0e, #d4952e); }
+.tom-azul { background: linear-gradient(135deg, #29548a, #5585c0); }
+@media (max-width: 1100px) { .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .stats-grid { grid-template-columns: minmax(0, 1fr); padding: 2px 12px 12px; gap: 10px; } .stat-valor { font-size: 24px; } }
+@media (hover: none) { .stat-card:hover { transform: none; } .stat-card:hover .stat-icone { transform: none; } }
+
 /* =========================================================== PRONTUÁRIO */
 .abas-pac { display: flex; gap: 4px; margin: 0 0 22px; border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; }
 .abas-pac a { position: relative; flex: none; padding: 10px 14px 12px; font-size: var(--t-sm); font-weight: 600; color: var(--text-muted); transition: color var(--dur-2); }
