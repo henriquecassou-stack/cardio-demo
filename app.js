@@ -246,6 +246,7 @@ const rotas = [
 ];
 let saindoComAlteracoes = null;
 let ultimaTela = null; // re-render da mesma tela (salvar, marcar) não repete as entradas
+let entradaNova = true; // true quando a tela acabou de ser aberta (a coreografia de entrada só roda aí)
 function render() {
   if (!entrou()) return telaEntrada();
   $('#app').hidden = false;
@@ -262,6 +263,7 @@ function render() {
       view.innerHTML = '';
       const wrap = document.createElement('div');
       view.append(wrap);
+      entradaNova = caminho !== ultimaTela;
       fn(wrap, ...m.slice(1));
       if (caminho !== ultimaTela) { escalonar(wrap); contar(wrap); } else {
         wrap.classList.add('sem-entrada');
@@ -318,140 +320,281 @@ function pendencias() {
   return out.sort((a, b) => b.peso - a.peso);
 }
 
-/* ------------------------------------------- cards de números (Resumo do dia) */
-// Mesma estrutura do StatsCard: título, valor, variação com seta e cor, ícone com degradê, sobe ao passar o mouse.
-const ICONES_CARD = {
-  agenda: '<rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/>',
-  contato: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.1-5.5 6.5-5.5s5.9 1.9 6.5 5.5M19 8v6M16 11h6"/>',
-  dinheiro: '<rect x="2.5" y="6" width="19" height="13" rx="2.5"/><circle cx="12" cy="12.5" r="2.6"/><path d="M6 9.5v.01M18 15.5v.01"/>',
-  pulso: '<path d="M2.5 12h4l2-5 3.5 10 2.5-7 1.5 2h5.5"/>',
-};
-const SETAS = { sobe: '<path d="M7 17 17 7M9 7h8v8"/>', desce: '<path d="M7 7l10 10M17 9v8H9"/>', igual: '<path d="M5 12h14"/>' };
-function variacaoPct(atual, antes) { return antes ? ((atual - antes) / antes) * 100 : 0; }
+/* ============================================================ RESUMO DO DIA
+   (feito com a skill dashboards-premium)
+   Pergunta:   Novembro está no ritmo da meta do consultório?
+   Direção:    Clínico, no azul-petróleo do painel — a dona e a recepção olham no desktop, de manhã e entre pacientes.
+   Paleta:     branco-gelo #f3f6f6 / tinta #122023 / acento petróleo #0f5560 / contexto #b3c2c2 / verde #1f6b4a · vermelho #b42318
+   Tipografia: Instrument Serif (herói e manchete, "R$" menor) + Instrument Sans + IBM Plex Mono (datas, horas, deltas)
+   Assinatura: a marca vermelha de "hoje" — na barra da meta, na faixa de horas e na linha do "agora" da agenda.
+   Movimento:  editorial e tranquilo — manchete revela, herói conta, barra cresce, linha desenha, apoios em cascata (≤ 1,4 s, só na chegada).
+   ========================================================================== */
+let periodoResumo = 'atual';
 
-function cardsNumeros(d, agendaHoje) {
-  // Números do período anterior (a demonstração só guarda poucos dias de histórico)
-  const ind = { horariosSemanaPassada: 19, novos7Anteriores: 5, recebidoMesBase: 38950, recebidoMesAnterior: 44120, atendidosMesBase: 152, atendidosMesAnterior: 168, ...(d.indicadores || {}) };
-  const hoje = new Date();
-  const doMes = d.agendamentos.filter((a) => a.status === 'finalizado' && new Date(a.inicio).getMonth() === hoje.getMonth() && new Date(a.inicio).getFullYear() === hoje.getFullYear());
-  const recebido = ind.recebidoMesBase + doMes.reduce((t, a) => t + (servico(a.servicoId)?.preco || 0), 0);
-  const atendidos = ind.atendidosMesBase + doMes.length;
-  const novos7 = d.jornadas.filter((j) => diasDesde(j.criado) < 7).length;
+function semente(n) { let s = n >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); }
+// Valores diários de um mês: domingo fechado, sábado meio período; escala para somar "total" até "ateDia".
+function diasDoMes(ano, mes, total, ateDia, seed) {
+  const n = new Date(ano, mes + 1, 0).getDate(); const r = semente(seed); const pesos = [];
+  for (let dd = 1; dd <= n; dd++) { const wd = new Date(ano, mes, dd).getDay(); pesos.push(wd === 0 ? 0 : wd === 6 ? 0.45 : 0.75 + r() * 0.55); }
+  const pico = pesos.slice(0, ateDia).reduce((m, p, i) => (p > pesos[m] ? i : m), 0); pesos[pico] *= 1.9; // dia de mutirão
+  const soma = pesos.slice(0, ateDia).reduce((a, b) => a + b, 0) || 1;
+  return { diarios: pesos.map((p, i) => (i < ateDia ? (p / soma) * total : null)), pico };
+}
+const acumular = (arr) => { let t = 0; return arr.map((v) => (v == null ? null : (t += v))); };
+const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+const brlMil = (v) => `R$ ${(v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mil`;
+const pp = (v) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}`;
+
+function modeloResumo(d) {
+  const hoje = new Date(); const ano = hoje.getFullYear(); const mes = hoje.getMonth(); const dia = hoje.getDate();
+  const ant = new Date(ano, mes - 1, 1); const ant2 = new Date(ano, mes - 2, 1);
+  const doMes = d.agendamentos.filter((a) => a.status === 'finalizado' && new Date(a.inicio).getMonth() === mes && new Date(a.inicio).getFullYear() === ano);
+  // Base proporcional ao dia do mês (a demonstração só guarda poucos dias), um pouco acima do ritmo da meta
+  const fracMes = dia / new Date(ano, mes + 1, 0).getDate();
+  const recebido = Math.round(62000 * fracMes * 1.04) + doMes.reduce((t, a) => t + (servico(a.servicoId)?.preco || 0), 0);
+  const atendidos = Math.round(226 * fracMes) + doMes.length;
+  const serieAtual = diasDoMes(ano, mes, recebido, dia, ano * 12 + mes);
+  const serieAnt = diasDoMes(ant.getFullYear(), ant.getMonth(), 58940, 31, ant.getFullYear() * 12 + ant.getMonth());
+  const serieAnt2 = diasDoMes(ant2.getFullYear(), ant2.getMonth(), 55210, 31, ant2.getFullYear() * 12 + ant2.getMonth());
+  const acAnt = acumular(serieAnt.diarios);
+  const fracAntAteHoje = (acAnt[Math.min(dia, acAnt.length) - 1] || 0) / 58940;
+  const pad31 = (a) => Array.from({ length: 31 }, (_, i) => (a[i] === undefined ? null : a[i]));
+  const servs = d.servicos.filter((s) => s.realizadosMes > 0 || s.status !== 'arquivado');
+  const r = semente(77);
+
+  const atual = {
+    chave: 'atual', nome: MESES[mes], fechado: false, dia, diasNoMes: new Date(ano, mes + 1, 0).getDate(),
+    meta: 62000, recebido, atendidos, faltasPct: 4.8, novos: Math.max(1, Math.round(26 * fracMes)),
+    comparaNome: MESES[ant.getMonth()].slice(0, 3),
+    antMesmoDia: { recebido: Math.round(58940 * fracAntAteHoje), atendidos: Math.round(214 * fracAntAteHoje), faltasPct: 6.1, novos: Math.round(23 * fracAntAteHoje) },
+    acumulado: pad31(acumular(serieAtual.diarios)), contexto: pad31(acAnt), pico: serieAtual.pico, evento: 'Mutirão de check-up',
+    sparkAtend: serieAtual.diarios.slice(0, dia).map((v) => (v == null ? 0 : Math.round(v / 290))),
+    sparkNovos: Array.from({ length: dia }, () => Math.floor(r() * 3.2)),
+    ranking: servs.map((s) => ({ key: s.id, label: s.nome, value: s.realizadosMes })),
+  };
+  const anterior = {
+    chave: 'anterior', nome: MESES[ant.getMonth()], fechado: true, dia: 31, diasNoMes: new Date(ant.getFullYear(), ant.getMonth() + 1, 0).getDate(),
+    meta: 60000, recebido: 58940, atendidos: 214, faltasPct: 6.1, novos: 23,
+    comparaNome: MESES[ant2.getMonth()].slice(0, 3),
+    antMesmoDia: { recebido: 55210, atendidos: 201, faltasPct: 7.0, novos: 19 },
+    acumulado: pad31(acAnt), contexto: pad31(acumular(serieAnt2.diarios)), pico: serieAnt.pico, evento: 'Campanha de check-up',
+    sparkAtend: serieAnt.diarios.map((v) => (v == null ? 0 : Math.round(v / 275))),
+    sparkNovos: Array.from({ length: 30 }, () => Math.floor(r() * 2.6)),
+    ranking: servs.map((s) => ({ key: s.id, label: s.nome, value: Math.max(0, Math.round(s.realizadosMes * 1.32 + (r() * 8 - 4))) })),
+  };
+  [atual, anterior].forEach((m) => {
+    m.ticket = m.recebido / m.atendidos;
+    m.antMesmoDia.ticket = m.antMesmoDia.recebido / Math.max(1, m.antMesmoDia.atendidos);
+    m.ideal = (m.meta / m.diasNoMes) * m.dia;
+    m.alvo = Array.from({ length: 31 }, (_, i) => (i < m.diasNoMes ? (m.meta / m.diasNoMes) * (i + 1) : null));
+    const top = Math.max(...m.ranking.map((x) => x.value));
+    m.ranking = m.ranking.filter((x) => x.value > 0).map((x) => ({ ...x, highlight: x.value === top }));
+  });
+  return { atual, anterior };
+}
+
+function manchete(m) {
+  if (m.fechado) {
+    const pct = Math.round((m.recebido / m.meta) * 100);
+    const dif = m.recebido - m.meta;
+    return `${m.nome[0].toUpperCase() + m.nome.slice(1)} fechou em <em>${pct}% da meta</em>, ${brlMil(Math.abs(dif))} ${dif >= 0 ? 'acima' : 'abaixo'}.`;
+  }
+  const dif = m.recebido - m.ideal;
+  return `${m.nome[0].toUpperCase() + m.nome.slice(1)} está <em>${brlMil(Math.abs(dif))} ${dif >= 0 ? 'à frente' : 'atrás'}</em> do ritmo da meta.`;
+}
+
+function apoiosDe(m) {
+  const a = m.antMesmoDia; const quando = m.fechado ? `vs ${m.comparaNome}` : `vs ${m.comparaNome} no mesmo dia`;
+  const dAt = m.atendidos - a.atendidos; const dFa = m.faltasPct - a.faltasPct; const dNo = m.novos - a.novos; const dTi = m.ticket - a.ticket;
   return [
-    { titulo: 'Horários hoje', valor: agendaHoje.length, var: variacaoPct(agendaHoje.length, ind.horariosSemanaPassada), periodo: 'vs. semana passada', icone: 'agenda', tom: 'petroleo', href: '#/' },
-    { titulo: 'Novos contatos', valor: novos7, var: variacaoPct(novos7, ind.novos7Anteriores), periodo: 'vs. 7 dias anteriores', icone: 'contato', tom: 'teal', href: '#/pacientes?f=novos' },
-    { titulo: 'Recebido no mês', valor: recebido, formato: 'brl0', var: variacaoPct(recebido, ind.recebidoMesAnterior), periodo: 'vs. mês anterior', icone: 'dinheiro', tom: 'ambar', href: '#/hoje' },
-    { titulo: 'Atendidos no mês', valor: atendidos, var: variacaoPct(atendidos, ind.atendidosMesAnterior), periodo: 'vs. mês anterior', icone: 'pulso', tom: 'azul', href: '#/pacientes' },
+    { id: 'atend', rotulo: 'Atendidos', valor: m.atendidos, fmt: 'int', delta: `${pp(dAt)} ${quando}`, bom: dAt >= 0, spark: m.sparkAtend },
+    { id: 'faltas', rotulo: 'Faltas', valor: m.faltasPct, fmt: 'dec1', unidade: '%', delta: `${pp(dFa)} p.p. ${quando}`, bom: dFa <= 0 },
+    { id: 'novos', rotulo: 'Novos contatos', valor: m.novos, fmt: 'int', delta: `${pp(dNo)} ${quando}`, bom: dNo >= 0, spark: m.sparkNovos },
+    { id: 'ticket', rotulo: 'Ticket médio', valor: m.ticket, fmt: 'int', prefixo: 'R$', delta: `${dTi >= 0 ? '+' : '−'}R$ ${Math.abs(Math.round(dTi)).toLocaleString('pt-BR')} ${quando}`, bom: dTi >= 0 },
   ];
 }
 
-function cardNumero(c) {
-  const v = Math.round(c.var * 10) / 10;
-  const sentido = v > 0 ? 'sobe' : v < 0 ? 'desce' : 'igual';
-  const pct = `${v > 0 ? '+' : ''}${v.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`;
-  return `<a class="stat-card" href="${c.href}">
-    <div class="stat-txt">
-      <p class="stat-titulo">${esc(c.titulo)}</p>
-      <p class="stat-valor num"><span data-conta="${c.valor}"${c.formato ? ` data-formato="${c.formato}"` : ''}>${formatarConta(c.formato, c.valor)}</span></p>
-      <p class="stat-var ${sentido}"><svg viewBox="0 0 24 24" aria-hidden="true">${SETAS[sentido]}</svg><span class="num">${pct}</span><span class="stat-periodo">${esc(c.periodo)}</span></p>
+function faixaHorasHoje(d) {
+  const { abre, fecha } = d.agendaHoras; const lista = agendaDoDia(chaveDia(new Date()));
+  const agoraMin = new Date().getHours() * 60 + new Date().getMinutes();
+  const cels = [];
+  for (let h = abre; h < fecha; h++) {
+    const ocupado = lista.filter((a) => a.status !== 'faltou').reduce((t, a) => {
+      const i = minutosDoDia(a.inicio); const f = i + a.duracao;
+      return t + Math.max(0, Math.min(f, (h + 1) * 60) - Math.max(i, h * 60));
+    }, 0);
+    cels.push({ h, o: Math.min(1, ocupado / (60 * d.recursos.length)) });
+  }
+  const pos = agoraMin >= abre * 60 && agoraMin <= fecha * 60 ? ((agoraMin - abre * 60) / ((fecha - abre) * 60)) * 100 : null;
+  const feitos = lista.filter((a) => a.status === 'finalizado').length; const faltam = lista.filter((a) => !['finalizado', 'faltou'].includes(a.status)).length;
+  return `
+    <div class="faixa-horas" role="img" aria-label="Ocupação da agenda por hora hoje">
+      ${cels.map((c) => `<span class="hc" style="--o:${(0.08 + c.o * 0.92).toFixed(2)}" title="${pad(c.h)}h · ${Math.round(c.o * 100)}% ocupado"></span>`).join('')}
+      ${pos != null ? `<i class="hoje-marca" style="left:${pos.toFixed(1)}%"><b>agora</b></i>` : ''}
     </div>
-    <span class="stat-icone tom-${c.tom}" aria-hidden="true"><svg viewBox="0 0 24 24">${ICONES_CARD[c.icone]}</svg></span>
-  </a>`;
+    <div class="faixa-horas-eixo num">${cels.filter((c) => (c.h - abre) % 3 === 0).map((c) => `<span style="left:${(((c.h - abre) / (fecha - abre)) * 100).toFixed(1)}%">${pad(c.h)}h</span>`).join('')}</div>
+    <p class="small muted" style="margin:8px 0 0">${plural(feitos, 'atendido', 'atendidos')} · ${faltam} a seguir · ${lista.filter((a) => a.status === 'faltou').length} falta</p>`;
 }
 
-/* ---------------------------------------------------------------- tela: Hoje */
 function telaHoje(el) {
   const d = D();
-  const abertas = d.jornadas.filter((j) => ABERTAS.includes(j.etapa));
-  const novos = d.jornadas.filter((j) => j.etapa === 'novo').sort((a, b) => b.criado.localeCompare(a.criado));
+  const modelo = modeloResumo(d);
+  if (entradaNova) periodoResumo = 'atual';
+  const m = modelo[periodoResumo];
   const agendaHoje = agendaDoDia(chaveDia(new Date()));
-  const rascunhos = d.pacientes.flatMap((p) => (p.prontuario?.evolucoes || []).filter((e) => !e.assinada));
-  const proximos = agendaHoje.filter((a) => !['finalizado', 'faltou'].includes(a.status)).slice(0, 5);
-  const emAberto = abertas.reduce((t, j) => t + saldo(j.orcamento), 0);
-  const media = abertas.length ? Math.round(abertas.reduce((t, j) => t + diasDesde(j.criado), 0) / abertas.length) : 0;
+  const proximos = agendaHoje.filter((a) => !['finalizado', 'faltou'].includes(a.status)).slice(0, 4);
   const limite = inicioDoDia(2);
   const tarefas = d.tarefas.filter((t) => !t.feita && new Date(t.venceEm) < limite).sort((a, b) => a.venceEm.localeCompare(b.venceEm));
   const lista = pendencias();
-  const hoje = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
-  const atrasadas = tarefas.filter((t) => atrasada(t.venceEm)).length;
-  const pct = Math.min(100, (d.espaco.usado / d.espaco.limite) * 100);
+  const hojeTxt = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'short' }).replace('.', '');
+  const A = entradaNova && !Motion.reduced;
+  const an = (tipo, atraso, extra = '') => (A ? ` data-anim="${tipo}" data-delay="${atraso}"${extra}` : '');
 
   el.innerHTML = `
-    <div class="cab">
+  <div class="dash">
+    <header class="dash-cab">
       <div>
-        <h1>Resumo do dia</h1>
-        <div class="meta">${esc(hoje)} · ${plural(novos.length, 'pedido novo', 'pedidos novos')} · ${plural(atrasadas, 'tarefa atrasada', 'tarefas atrasadas')}</div>
+        <p class="rotulo"${an('fade', 0)}>Resumo · ${esc(hojeTxt)}</p>
+        <h1 class="manchete" id="manchete"${an('mask', 120, ' data-dur="650"')}>${manchete(m)}</h1>
       </div>
-      <div class="acoes"><button class="btn" data-nova-jornada>+ Novo contato</button></div>
-    </div>
-    <section class="monitor" aria-label="Resumo do consultório hoje">
-      <div class="monitor-cab">
-        <span class="vivo" aria-hidden="true"></span>
-        <span class="rotulo">Pulso do consultório · <b>${plural(abertas.length, 'paciente', 'pacientes')} em acompanhamento</b></span>
-        <span class="relogio" id="relogio">${hora(new Date().toISOString())}</span>
+      <div class="periodo" role="group" aria-label="Período">
+        <span class="periodo-pilula" aria-hidden="true"></span>
+        ${['atual', 'anterior'].map((k) => `<button type="button" data-periodo="${k}" aria-pressed="${k === periodoResumo}">${MESES[k === 'atual' ? new Date().getMonth() : (new Date().getMonth() + 11) % 12].replace(/^./, (c) => c.toUpperCase())}</button>`).join('')}
       </div>
-      <svg class="varredura" viewBox="0 0 1000 92" preserveAspectRatio="none" aria-hidden="true">
-        <path class="fundo" d="${tiraECG(1000, 58, 125, 2.3, 40)}"/>
-        <path class="vivo" d="${tiraECG(1000, 58, 125, 2.3, 40)}"/>
-      </svg>
-      <div class="stats-grid">${cardsNumeros(d, agendaHoje).map(cardNumero).join('')}</div>
+    </header>
+
+    <section class="heroi" aria-label="Recebido no mês e meta">
+      <div class="heroi-num">
+        <p class="rotulo" id="heroi-rotulo">Recebido em ${esc(m.nome)}</p>
+        <p class="heroi-valor"><span class="moeda">R$</span><span id="heroi-v"${A ? ` data-anim="count" data-to="${Math.round(m.recebido)}" data-format="plain" data-delay="200" data-dur="1050"` : ''}>${Motion.fmt.plain(m.recebido)}</span></p>
+        <p class="heroi-de" id="heroi-de"><span class="num">${Math.round((m.recebido / m.meta) * 100)}%</span> da meta de <b>${brlMil(m.meta)}</b></p>
+      </div>
+      <div class="heroi-meta">
+        <div id="g-meta"></div>
+        <div class="meta-legenda num" id="meta-legenda"></div>
+      </div>
     </section>
-    <div class="grade-home">
-      <section aria-labelledby="h-atencao">
+
+    <section class="faixa-apoios" aria-label="Números de apoio" ${A ? 'data-stagger="55"' : ''}>
+      ${apoiosDe(m).map((p, i) => `
+        <div class="apoio"${an('rise', 420 + i * 55)} data-apoio="${p.id}">
+          <p class="rotulo">${p.rotulo}</p>
+          <p class="apoio-valor">${p.prefixo ? `<span class="unidade">${p.prefixo}</span>` : ''}<span data-valor="${p.valor}" data-value="${p.valor}" data-fmt="${p.fmt}">${Motion.fmt[p.fmt](p.valor)}</span>${p.unidade ? `<span class="unidade">${p.unidade}</span>` : ''}</p>
+          <p class="apoio-delta num ${p.bom ? 'bom' : 'ruim'}">${esc(p.delta)}</p>
+          ${p.spark ? `<div class="apoio-spark" data-spark="${p.id}"></div>` : ''}
+        </div>`).join('')}
+    </section>
+
+    <section class="linha-dash">
+      <div class="bloco-dash ritmo">
+        <div class="bloco-cab"><h2>Ritmo do mês</h2><p>Recebido acumulado dia a dia, contra o mês anterior e a linha da meta</p></div>
+        <div id="g-ritmo"></div>
+      </div>
+      <div class="bloco-dash ranking">
+        <div class="bloco-cab"><h2>O que mais se fez</h2><p>Exames e consultas realizados no mês</p></div>
+        <div id="g-rank"></div>
+      </div>
+    </section>
+
+    <section class="linha-dash detalhe-dash">
+      <div aria-labelledby="h-atencao">
         <h2 class="secao" id="h-atencao">Precisa de atenção <span class="num">${lista.length}</span></h2>
         ${lista.length === 0 ? '<p class="vazio">Tudo em ordem com pacientes e exames.</p>' : `
         <ul class="lista">
-          ${lista.slice(0, 9).map((p) => `
+          ${lista.slice(0, 8).map((p) => `
             <li class="peso-${p.peso}"><a class="linha" href="${p.link}">
               <span class="sigla${p.alerta ? ' alerta' : ''}">${esc(p.cod)}</span>
               <span class="corpo"><span class="titulo">${esc(p.titulo)}</span><span class="sub">${esc(p.texto)}</span></span>
               <span class="seta" aria-hidden="true">→</span>
             </a></li>`).join('')}
-        </ul>${lista.length > 9 ? `<p class="small muted" style="margin-top:8px">Mais ${lista.length - 9} itens com prioridade menor.</p>` : ''}`}
-      </section>
+        </ul>${lista.length > 8 ? `<p class="small muted" style="margin-top:8px">Mais ${lista.length - 8} itens com prioridade menor.</p>` : ''}`}
+      </div>
       <div class="coluna">
-        <section aria-labelledby="h-proximos">
-          <h2 class="secao" id="h-proximos">Próximos horários <span class="num">${proximos.length}</span><a class="link" href="#/">Agenda</a></h2>
-          ${proximos.length === 0 ? '<p class="vazio">Sem mais horários hoje.</p>' : `
-          <ul class="lista">
+        <section aria-labelledby="h-hoje">
+          <h2 class="secao" id="h-hoje">Hoje na agenda <span class="num">${agendaHoje.length}</span><a class="link" href="#/">Abrir agenda</a></h2>
+          ${faixaHorasHoje(d)}
+          ${proximos.length ? `<ul class="lista" style="margin-top:14px">
             ${proximos.map((a) => { const p = paciente(a.pacienteId); const s = servico(a.servicoId); return `
               <li><a class="linha" href="#/" data-abrir-ag="${a.id}">
                 <span class="hora-ag num">${hhmm(minutosDoDia(a.inicio))}</span>
-                <span class="corpo"><span class="titulo">${esc(p?.nome)}</span><span class="sub">${esc(s?.nome || '')} · ${esc(recurso(a.recurso)?.nome || '')}</span></span>
+                <span class="corpo"><span class="titulo">${esc(p?.nome)}</span><span class="sub">${esc(s?.nome || '')}</span></span>
                 <span class="status-ag ag-${a.status}"><i></i>${STATUS_AG[a.status]}</span>
               </a></li>`; }).join('')}
-          </ul>`}
+          </ul>` : '<p class="vazio" style="margin-top:14px">Sem mais horários hoje.</p>'}
         </section>
         <section aria-labelledby="h-tarefas">
-          <h2 class="secao" id="h-tarefas">Tarefas até amanhã <span class="num">${tarefas.length}</span></h2>
+          <h2 class="secao" id="h-tarefas">Tarefas até amanhã <span class="num">${tarefas.length}</span><button class="link link-btn" data-nova-jornada>+ Novo contato</button></h2>
           ${tarefas.length === 0 ? '<p class="vazio">Nada marcado para hoje ou amanhã.</p>' : `
-          <ul class="lista" id="lista-tarefas">
-            ${tarefas.slice(0, 7).map((t) => linhaTarefa(t, true)).join('')}
-          </ul>`}
-        </section>
-        <section aria-labelledby="h-novos">
-          <h2 class="secao" id="h-novos">Novos contatos <span class="num">${novos.length}</span>${novos.length ? '<span class="ponto-vivo" aria-hidden="true"></span>' : ''}<a class="link" href="#/pacientes?f=novos">Ver todos</a></h2>
-          ${novos.length === 0 ? '<p class="vazio">Nenhum paciente esperando resposta.</p>' : `
-          <ul class="lista">
-            ${novos.slice(0, 5).map((j) => { const p = paciente(j.pacienteId); const s = servico(j.servicoId); return `
-              <li><a class="linha" href="#/atendimento/${j.id}">
-                <span class="corpo"><span class="titulo">${esc(p?.nome)}</span><span class="sub">${esc(j.pedido)}${s ? ` · ${esc(s.nome)}` : ''}</span></span>
-                <span class="small faint">${tempoAtras(j.criado)}</span>
-              </a></li>`; }).join('')}
-          </ul>`}
-        </section>
-        <section aria-labelledby="h-espaco">
-          <h2 class="secao" id="h-espaco">Espaço dos laudos e pedidos</h2>
-          <div class="barra" role="progressbar" aria-valuenow="${Math.round(pct)}" aria-valuemin="0" aria-valuemax="100" aria-labelledby="h-espaco"><div style="--p:${(pct / 100).toFixed(3)}"></div></div>
-          <p class="small muted" style="margin:8px 0 0"><span class="num" style="color:var(--text-strong)">${(d.espaco.usado / 1048576).toFixed(0)} MB</span> de <span class="num">1 GB</span> · PDFs de laudo e fotos de pedido médico</p>
+          <ul class="lista" id="lista-tarefas">${tarefas.slice(0, 6).map((t) => linhaTarefa(t, true)).join('')}</ul>`}
         </section>
       </div>
-    </div>`;
+    </section>
+  </div>`;
+
+  // Gráficos (desenhados à mão em SVG, cores dos tokens)
+  const legendaMeta = (mm) => {
+    const g = $('#meta-legenda', el); if (!g) return;
+    g.innerHTML = mm.fechado
+      ? `<span>mês fechado</span><span class="meta-txt">meta ${brlMil(mm.meta)}</span>`
+      : `<span class="hoje-txt">hoje, dia ${mm.dia} · o ritmo pede ${brlMil(mm.ideal)}</span><span class="meta-txt">meta ${brlMil(mm.meta)}</span>`;
+  };
+  const meta = Charts.bullet($('#g-meta', el), { value: modelo.atual.recebido, target: modelo.atual.meta, max: modelo.atual.meta * 1.08, now: modelo.atual.dia / modelo.atual.diasNoMes, delay: 300, ariaLabel: 'Recebido contra a meta do mês' });
+  if (periodoResumo !== 'atual') meta.update({ value: m.recebido, target: m.meta, max: m.meta * 1.08, now: null });
+  legendaMeta(m);
+
+  // Rótulos humanos: "1 nov", "7 nov"... (o gráfico mostra ~6 e usa todos no scrub)
+  const opcoesRitmo = (mm) => ({
+    series: [{ values: mm.contexto, label: mm.fechado ? MESES[(new Date().getMonth() + 10) % 12].slice(0, 3) : mm.comparaNome }, { values: mm.acumulado, label: mm.nome.slice(0, 3), accent: true }],
+    target: { values: mm.alvo, label: 'meta' },
+    annotations: [{ index: mm.pico, text: mm.evento }],
+    labels: Array.from({ length: 31 }, (_, i) => (i < mm.diasNoMes ? `${i + 1} ${mm.nome.slice(0, 3)}` : "")),
+  });
+  const ritmo = Charts.line($('#g-ritmo', el), {
+    ...opcoesRitmo(m), area: true, smooth: true, height: 250, delay: 300, animate: A,
+    format: (v) => brlMil(v), axisFormat: (v) => (v ? `${Math.round(v / 1000)} mil` : '0'), ticks: 3,
+    ariaLabel: 'Recebido acumulado no mês, comparado com o mês anterior e com a meta',
+  });
+  const rank = Charts.bars($('#g-rank', el), { items: m.ranking.slice(0, 6), format: (v) => Motion.fmt.int(v), delay: 560, stagger: 45, animate: A });
+  const sparks = {};
+  $$('[data-spark]', el).forEach((s) => { const p = apoiosDe(m).find((x) => x.id === s.dataset.spark); sparks[p.id] = Charts.spark(s, { values: p.spark, accent: p.id === 'atend', height: 28, delay: 700, animate: A, dot: true }); });
+  if (A) Motion.play(el);
+
+  // Troca de período: os valores viajam do estado antigo ao novo (sem recarregar a tela)
+  $$('[data-periodo]', el).forEach((b) => b.addEventListener('click', () => {
+    if (b.dataset.periodo === periodoResumo) return;
+    periodoResumo = b.dataset.periodo; const mm = modelo[periodoResumo];
+    $$('[data-periodo]', el).forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    moverPilula();
+    $('#manchete', el).innerHTML = manchete(mm);
+    $('#manchete', el).animate?.([{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: Motion.reduced ? 0 : 420, easing: Motion.EASE.out });
+    $('#heroi-rotulo', el).textContent = `Recebido em ${mm.nome}`;
+    Motion.tween($('#heroi-v', el), Math.round(mm.recebido), { format: 'plain' });
+    $('#heroi-de', el).innerHTML = `<span class="num">${Math.round((mm.recebido / mm.meta) * 100)}%</span> da meta de <b>${brlMil(mm.meta)}</b>`;
+    meta.update({ value: mm.recebido, target: mm.meta, max: mm.meta * 1.08, now: mm.fechado ? null : mm.dia / mm.diasNoMes });
+    legendaMeta(mm);
+    ritmo.update(opcoesRitmo(mm));
+    rank.update({ items: mm.ranking.slice(0, 6) });
+    apoiosDe(mm).forEach((p) => {
+      const box = $(`[data-apoio="${p.id}"]`, el); if (!box) return;
+      Motion.tween($('[data-valor]', box), p.valor, { format: p.fmt });
+      const dl = $('.apoio-delta', box); dl.textContent = p.delta; dl.className = `apoio-delta num ${p.bom ? 'bom' : 'ruim'}`;
+      if (sparks[p.id]) sparks[p.id].update({ values: p.spark });
+    });
+  }));
+  const moverPilula = () => {
+    const ativo = $('[data-periodo][aria-pressed="true"]', el); const pil = $('.periodo-pilula', el);
+    if (!ativo || !pil) return;
+    const ok = ativo.offsetWidth > 40; // medido de verdade (fonte carregada, tela visível)
+    pil.parentElement.classList.toggle('tem-pilula', ok);
+    if (ok) { pil.style.width = `${ativo.offsetWidth}px`; pil.style.transform = `translateX(${ativo.offsetLeft - 3}px)`; }
+  };
+  requestAnimationFrame(moverPilula);
+  document.fonts?.ready.then(moverPilula);
+  if ('ResizeObserver' in window) new ResizeObserver(moverPilula).observe($('.periodo', el));
+
   ligarTarefas(el);
-  $('[data-nova-jornada]', el).onclick = () => modalNovaJornada();
+  $('[data-nova-jornada]', el)?.addEventListener('click', () => modalNovaJornada());
   $$('[data-abrir-ag]', el).forEach((l) => l.addEventListener('click', (e) => { e.preventDefault(); abrirHorario(l.dataset.abrirAg); }));
-  clearInterval(window.__relogio);
-  window.__relogio = setInterval(() => { const r = $('#relogio'); if (r) r.textContent = hora(new Date().toISOString()); else clearInterval(window.__relogio); }, 20000);
 }
 
 function linhaTarefa(t, comRef) {

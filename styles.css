@@ -583,33 +583,93 @@ input.invalido { border-color: var(--alert); animation: treme 280ms var(--ease-s
 .folha table td { padding: 10px 0; }
 .folha footer { margin-top: 34px; padding-top: 14px; border-top: 1px solid var(--border); font-size: var(--t-xs); color: var(--text-muted); }
 
-/* ===================================== cards de números (Resumo do dia) */
-.stats-grid { position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; padding: 2px 16px 16px; }
-.stat-card { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-width: 0; padding: 18px 18px 16px; border: 1px solid var(--border); border-radius: var(--radius-lg);
-  background: rgba(255,255,255,.92); box-shadow: var(--sombra-1);
-  transition: transform 280ms cubic-bezier(.34, 1.4, .64, 1), box-shadow var(--dur-3) var(--ease-sai), border-color var(--dur-2); }
-.stat-card:hover { transform: translateY(-5px); box-shadow: var(--sombra-2); border-color: var(--border-strong); }
-.stat-card:active { transform: translateY(-2px); }
-.stat-txt { min-width: 0; }
-.stat-titulo { margin: 0; font-size: 13px; color: var(--text-muted); }
-.stat-valor { margin: 4px 0 0; font-size: 26px; line-height: 1.1; font-weight: 500; letter-spacing: -0.04em; color: var(--text-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.stat-var { margin: 8px 0 0; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; font-size: 12.5px; font-weight: 600; }
-.stat-var svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
-.stat-var.sobe { color: var(--ok); }
-.stat-var.desce { color: var(--alert); }
-.stat-var.igual { color: var(--text-faint); }
-.stat-periodo { font-weight: 400; color: var(--text-faint); margin-left: 2px; }
-.stat-icone { width: 46px; height: 46px; flex: none; display: grid; place-items: center; border-radius: 12px; color: #fff;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 8px 16px -10px currentColor; transition: transform 280ms cubic-bezier(.34, 1.4, .64, 1); }
-.stat-card:hover .stat-icone { transform: rotate(-6deg) scale(1.05); }
-.stat-icone svg { width: 22px; height: 22px; fill: none; stroke: #fff; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.tom-petroleo { background: linear-gradient(135deg, #0f5560, #2f8a94); }
-.tom-teal { background: linear-gradient(135deg, #1b7266, #46a796); }
-.tom-ambar { background: linear-gradient(135deg, #9a5f0e, #d4952e); }
-.tom-azul { background: linear-gradient(135deg, #29548a, #5585c0); }
-@media (max-width: 1100px) { .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 640px) { .stats-grid { grid-template-columns: minmax(0, 1fr); padding: 2px 12px 12px; gap: 10px; } .stat-valor { font-size: 24px; } }
-@media (hover: none) { .stat-card:hover { transform: none; } .stat-card:hover .stat-icone { transform: none; } }
+/* ===================================== RESUMO DO DIA (dashboards-premium)
+   Hierarquia: manchete → herói (recebido x meta) → faixa de apoios → ritmo + ranking → detalhe.
+   Separação por espaço e fios finos; nenhum card com sombra. Ver o brief no topo de telaHoje (app.js). */
+.dash {
+  --ink: var(--text-strong); --ink-2: var(--text-muted); --ink-3: var(--text-faint);
+  --context: #b3c2c2; --line: rgba(18, 32, 35, .1);
+  --font-num: var(--font-mono); --font-text: var(--font-ui);
+}
+.dash-cab { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px 32px; flex-wrap: wrap; padding-bottom: 26px; border-bottom: 1px solid var(--border); }
+.dash-cab .rotulo { margin: 0 0 10px; text-transform: uppercase; }
+.manchete { margin: 0; max-width: 20ch; font-family: var(--font-display); font-weight: 400; font-size: clamp(34px, 3.6vw, 52px); line-height: 1.04; letter-spacing: -0.02em; color: var(--text-strong); }
+.manchete em { font-style: italic; color: var(--accent); }
+.periodo { position: relative; display: inline-flex; padding: 3px; border: 1px solid var(--border); border-radius: 99px; background: var(--surface); }
+.periodo button { position: relative; z-index: 1; border: 0; background: none; height: 32px; padding: 0 16px; border-radius: 99px; font-size: 13px; font-weight: 600; color: var(--text-muted); cursor: pointer; transition: color var(--dur-2); }
+.periodo button[aria-pressed="true"] { color: #fff; }
+.periodo button:active { transform: scale(.98); }
+.periodo-pilula { position: absolute; left: 3px; top: 3px; bottom: 3px; width: 0; border-radius: 99px; background: var(--accent); transition: transform 380ms var(--ease-assenta), width 380ms var(--ease-assenta); }
+
+.heroi { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 24px 48px; align-items: end; padding: 30px 0 28px; border-bottom: 1px solid var(--border); }
+.heroi .rotulo { margin: 0; text-transform: uppercase; }
+.heroi-valor { margin: 6px 0 0; display: flex; align-items: baseline; gap: 10px; font-family: var(--font-display); font-weight: 400; font-size: clamp(64px, 7.4vw, 104px); line-height: .92; letter-spacing: -0.035em; color: var(--text-strong); font-variant-numeric: tabular-nums; }
+.heroi-valor .moeda { font-size: .34em; letter-spacing: 0; color: var(--text-muted); transform: translateY(-.9em); }
+.heroi-de { margin: 12px 0 0; font-size: 14px; color: var(--text-muted); }
+.heroi-de .num { color: var(--accent-strong); font-weight: 500; }
+.heroi-de b { color: var(--text-strong); font-weight: 600; }
+.heroi-meta { padding-bottom: 8px; }
+.dash .ch-bullet { height: 34px; }
+.dash .ch-bullet .rng { top: 12px; bottom: 12px; background: var(--n-100); opacity: 1 !important; border-radius: 99px; }
+.dash .ch-bullet .val { top: 12px; bottom: 12px; border-radius: 99px; background: var(--accent); }
+.dash .ch-bullet .tgt { width: 2px; top: 4px; bottom: 4px; background: var(--text-strong); border-radius: 2px; }
+/* Assinatura: a marca vermelha de "hoje" (a mesma linha do "agora" da agenda) */
+.dash .ch-bullet .now { top: 0; bottom: 0; border-left: 2px solid var(--alert); }
+.dash .ch-bullet .now::before { content: ""; position: absolute; left: -5px; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--alert); }
+.meta-legenda { display: flex; justify-content: space-between; gap: 12px; margin-top: 10px; font-size: 11.5px; color: var(--text-faint); }
+.meta-legenda .hoje-txt { color: var(--alert); font-weight: 500; }
+.meta-legenda .meta-txt { color: var(--text-strong); }
+
+.faixa-apoios { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-bottom: 1px solid var(--border); }
+.apoio { position: relative; padding: 22px 24px 20px; border-left: 1px solid var(--border-soft); min-width: 0; }
+.apoio:first-child { border-left: 0; padding-left: 0; }
+.apoio .rotulo { margin: 0; text-transform: uppercase; }
+.apoio-valor { margin: 8px 0 0; display: flex; align-items: baseline; gap: 4px; font-family: var(--font-display); font-size: 40px; line-height: 1; letter-spacing: -0.02em; color: var(--text-strong); font-variant-numeric: tabular-nums; }
+.apoio-valor .unidade { font-family: var(--font-ui); font-size: 14px; letter-spacing: 0; color: var(--text-muted); }
+.apoio-delta { margin: 8px 0 0; font-size: 11.5px; }
+.apoio-delta.bom { color: var(--ok); }
+.apoio-delta.ruim { color: var(--alert); }
+.apoio-spark { position: absolute; right: 22px; top: 24px; width: 84px; }
+
+.linha-dash { display: grid; grid-template-columns: minmax(0, 8fr) minmax(0, 4fr); gap: 48px; padding: 30px 0 6px; }
+.bloco-cab { margin-bottom: 16px; }
+.bloco-cab h2 { margin: 0; font-size: var(--t-md); font-weight: 600; color: var(--text-strong); }
+.bloco-cab p { margin: 3px 0 0; font-size: 12.5px; color: var(--text-faint); }
+.ritmo .ch-line { stroke-width: 2.25; }
+.ritmo .ch-target { stroke: var(--text-muted); }
+.ranking .ch-row-label { font-size: 13px; }
+.ranking .ch-track { height: 8px; }
+.ranking .ch-bar { border-radius: 0 2px 2px 0; }
+.detalhe-dash { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); padding-top: 34px; border-top: 1px solid var(--border); margin-top: 26px; }
+.link-btn { border: 0; background: none; cursor: pointer; font: inherit; }
+
+.faixa-horas { position: relative; display: grid; grid-template-columns: repeat(12, 1fr); gap: 3px; height: 30px; }
+.faixa-horas .hc { position: relative; border-radius: 3px; background: var(--n-50); overflow: hidden; }
+.faixa-horas .hc::before { content: ""; position: absolute; inset: 0; background: var(--accent); opacity: var(--o); }
+.hoje-marca { position: absolute; top: -6px; bottom: -6px; width: 0; border-left: 2px solid var(--alert); }
+.hoje-marca::before { content: ""; position: absolute; left: -5px; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--alert); }
+.hoje-marca b { position: absolute; top: -21px; left: -2px; font-size: 10.5px; font-weight: 600; color: var(--alert); white-space: nowrap; }
+.faixa-horas-eixo { position: relative; height: 16px; margin-top: 6px; font-size: 10.5px; color: var(--text-faint); }
+.faixa-horas-eixo span { position: absolute; top: 0; }
+
+@media (max-width: 1100px) {
+  .heroi { grid-template-columns: minmax(0, 1fr); }
+  .faixa-apoios { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .apoio:nth-child(3) { border-left: 0; padding-left: 0; }
+  .apoio:nth-child(n+3) { border-top: 1px solid var(--border-soft); }
+  .linha-dash, .detalhe-dash { grid-template-columns: minmax(0, 1fr); gap: 34px; }
+}
+@media (max-width: 640px) {
+  .manchete { font-size: 32px; }
+  .heroi { padding: 22px 0; }
+  .heroi-valor { font-size: 64px; }
+  /* No celular, os apoios viram uma faixa rolável com encaixe */
+  .faixa-apoios { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; }
+  .apoio { flex: 0 0 62%; scroll-snap-align: start; padding: 18px 16px 16px !important; border-left: 1px solid var(--border-soft) !important; border-top: 0 !important; }
+  .apoio:first-child { border-left: 0 !important; padding-left: 0 !important; }
+  .apoio-valor { font-size: 34px; }
+  .apoio-spark { position: static; margin-top: 8px; width: 100%; }
+}
 
 /* =========================================================== PRONTUÁRIO */
 .abas-pac { display: flex; gap: 4px; margin: 0 0 22px; border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; }
@@ -828,4 +888,14 @@ div.campo { display: grid; gap: 8px; }
   .tela-entrada .ecg-fundo path { stroke-dashoffset: 0; }
   .toast .tempo { display: none; }
   ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+}
+.ranking .ch-row { grid-template-columns: minmax(120px, 52%) 1fr auto; gap: 12px; }
+.ranking .ch-row-val { min-width: 34px; }
+/* Seletor de período: o botão ativo já é pintado; a pílula deslizante só aparece depois de medida */
+.periodo button[aria-pressed="true"] { background: var(--accent); }
+.periodo.tem-pilula button[aria-pressed="true"] { background: transparent; }
+.periodo:not(.tem-pilula) .periodo-pilula { opacity: 0; }
+@media (max-width: 640px) {
+  .faixa-apoios { scroll-padding-left: 16px; }
+  .meta-legenda { flex-wrap: wrap; font-size: 11px; }
 }

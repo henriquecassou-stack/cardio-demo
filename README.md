@@ -7,7 +7,7 @@ os dados são de exemplo e ficam só no navegador de quem abre. "Recomeçar do z
 | Premium Curitiba (loja) | Ritmo Cardiologia (consultório) |
 |---|---|
 | (novo) | Agenda: colunas por profissional/sala, semana, linha do "agora", arrastar para remarcar, gaveta com status (Agendado → Confirmado → Na recepção → Em atendimento → Finalizado, Faltou), confirmação por WhatsApp, horários livres |
-| Visão geral | Resumo do dia: números do dia, "Precisa de atenção", tarefas até amanhã, novos contatos, espaço dos laudos |
+| Visão geral | Resumo do dia (skill dashboards-premium): manchete gerada dos dados, recebido x meta com marca de "hoje", faixa de apoios com contexto, ritmo do mês (acumulado x mês anterior x meta), ranking de exames, faixa de horas de hoje, "Precisa de atenção" e tarefas; troca Novembro/Outubro com transição |
 | Funil de vendas | Retirado do menu. Cada contato vira um "atendimento" dentro da ficha do paciente |
 | Negociação + proposta | Atendimento: histórico, exame de interesse, orçamento (convênio/desconto/parcelas), próximos passos, concluir ou "não seguiu" com motivo |
 | Proposta impressa | Orçamento impresso / PDF |
