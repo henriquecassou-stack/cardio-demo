@@ -1705,7 +1705,7 @@ function blocoAgenda(a) {
   const ini = minutosDoDia(a.inicio) - D().agendaHoras.abre * 60;
   const h = Math.max(24, a.duracao * PX_MIN - 3);
   const curto = h < 46;
-  return `<button type="button" class="bloco ag-${a.status}${curto ? ' curto' : ''}" data-ag="${a.id}" draggable="true"
+  return `<button type="button" class="bloco-ag ag-${a.status}${curto ? ' curto' : ''}" data-ag="${a.id}" draggable="true"
     style="top:${ini * PX_MIN + 1}px;height:${h}px;view-transition-name:ag-${esc(a.id)}"
     aria-label="${hhmm(minutosDoDia(a.inicio))}, ${esc(p?.nome)}, ${esc(s?.nome)}, ${STATUS_AG[a.status]}">
     <span class="b-l1"><span class="num">${hhmm(minutosDoDia(a.inicio))}</span><b>${esc(nomeCurto(p?.nome || 'Paciente'))}</b>${p?.alerta ? `<i class="b-alerta" title="${esc(p.alerta)}"></i>` : ''}</span>
@@ -1804,7 +1804,7 @@ function telaAgenda(el) {
   }
 
   // Abrir horário / agendar no vazio
-  $$('.bloco', el).forEach((b) => b.addEventListener('click', () => abrirHorario(b.dataset.ag)));
+  $$('.bloco-ag', el).forEach((b) => b.addEventListener('click', () => abrirHorario(b.dataset.ag)));
   $$('.trilho', el).forEach((t) => t.addEventListener('click', (e) => {
     if (e.target !== t) return;
     const y = e.clientY - t.getBoundingClientRect().top;
@@ -1814,7 +1814,7 @@ function telaAgenda(el) {
 
   // Arrastar para remarcar (troca hora e, se o exame permitir, a coluna)
   let arrastando = null; let pegada = 0;
-  $$('.bloco', el).forEach((b) => {
+  $$('.bloco-ag', el).forEach((b) => {
     b.addEventListener('dragstart', (e) => {
       arrastando = b.dataset.ag; pegada = e.clientY - b.getBoundingClientRect().top;
       e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', arrastando);
