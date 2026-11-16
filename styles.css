@@ -1056,3 +1056,125 @@ main { padding-top: 24px; }
   .veu-lateral { z-index: 65; }
   .lateral-aberta { overflow: hidden; }
 }
+
+/* ==========================================================================
+   VISUAL "PAINEL" — menu lateral, cabeçalho com título e cards arredondados
+   (mesma paleta areia e vinho; inspirado nos layouts de kit de dashboard).
+   Só aparência: nenhuma regra muda o funcionamento das telas.
+   ========================================================================== */
+:root {
+  --radius-lg: 16px; --radius-xl: 24px;
+  --lateral-w: 268px;
+  --vinho-grad: linear-gradient(107deg, #9b3b47 0%, #7a1f2b 55%, #601722 100%);
+  --sombra-card: 0 1px 2px rgba(42,29,26,.035), 0 14px 34px -30px rgba(42,29,26,.4);
+}
+
+/* Cards: superfície clara, cantos de 24 px, sem contorno marcado */
+.heroi, .faixa-apoios, .bloco-dash, .detalhe-dash > *, .painel, .tabela-wrap, .agenda-wrap, .monitor, .registrar, .evolucao, .sinais {
+  border-color: var(--border-soft); border-radius: var(--radius-xl); box-shadow: var(--sombra-card);
+}
+.evolucao, .registrar { border-radius: var(--radius-lg); }
+.painel { padding: 20px 22px; }
+.etapa { border-radius: var(--radius-xl); }
+.cartao, .dia-sem { border-radius: var(--radius-lg); }
+.modal, .paleta { border-radius: 24px; }
+
+/* Botões em pílula, campos mais macios */
+.btn { border-radius: 999px; padding: 0 18px; }
+.btn.icone { border-radius: 50%; }
+.btn.sm { padding: 0 13px; }
+.nav-dia .btn:first-child { border-radius: 999px 0 0 999px; }
+.nav-dia .btn:last-child { border-radius: 0 999px 999px 0; }
+.btn.acento { background: var(--vinho-grad); }
+.btn.acento:hover { background: var(--accent-strong); }
+input[type=text], input[type=tel], input[type=email], input[type=number], input[type=date], input[type=password], input[type=search], select, textarea { border-radius: 12px; }
+.segmentos { border-radius: 999px; }
+.segmentos button { border-radius: 999px; }
+
+/* Títulos de seção maiores, como nos layouts */
+.bloco-cab h2 { font-size: 19px; }
+h2.secao { font-size: 17px; }
+
+/* Agenda: dia ativo com o degradê vinho */
+.dia-sem.ativo { background: var(--vinho-grad); }
+.trilho > .bloco { padding: 4px 9px 3px 11px; margin-bottom: 0; border-radius: 10px; }
+.trilho > .bloco:not(.ag-agendado) { background: color-mix(in srgb, var(--c) 9%, #fff); border: 1px solid color-mix(in srgb, var(--c) 28%, transparent); }
+
+/* Resumo do dia: o card principal vira o "cartão" em degradê vinho, com a batida de ECG ao fundo */
+.dash .heroi {
+  border: 0; color: #fffbf6;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='120' viewBox='0 0 300 120'%3E%3Cpath d='M0 90 L30 90 L36 84 L44 82 L50 90 L60 90 L64 96 L70 28 L76 108 L82 90 L100 90 L108 80 L116 75 L124 82 L130 90 L180 90 L186 84 L194 82 L200 90 L210 90 L214 96 L220 28 L226 108 L232 90 L250 90 L258 80 L266 75 L274 82 L280 90 L300 90' fill='none' stroke='%23ffffff' stroke-opacity='.13' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E") left 50% / 300px 120px repeat-x,
+    var(--vinho-grad);
+  box-shadow: 0 24px 48px -30px rgba(96,23,34,.85);
+}
+.dash .heroi .rotulo { color: rgba(255,251,246,.78); }
+.dash .heroi-valor { color: #fff; }
+.dash .heroi-valor .moeda { color: #ecd3a2; }
+.dash .heroi-de { color: rgba(255,251,246,.82); }
+.dash .heroi-de .num, .dash .heroi-de b { color: #fff; }
+.dash .heroi .ch-bullet .rng { background: rgba(255,255,255,.2); }
+.dash .heroi .ch-bullet .val { background: #fffbf6; }
+.dash .heroi .ch-bullet .tgt { background: #ecd3a2; }
+.dash .heroi .ch-bullet .now { border-left-color: #ffd9cf; }
+.dash .heroi .ch-bullet .now::before { background: #ffd9cf; }
+.dash .heroi .meta-legenda, .dash .heroi .meta-legenda .hoje-txt { color: rgba(255,251,246,.85); }
+.dash .heroi .meta-legenda .meta-txt { color: #ecd3a2; }
+
+/* Ranking colorido (uma cor por exame, como nos gráficos dos layouts) */
+.ranking .ch-track { border-radius: 99px; background: var(--n-50); overflow: hidden; }
+.ranking .ch-bar { border-radius: 99px; }
+.ranking .ch-row:nth-child(6n+1) .ch-bar { background: var(--accent); }
+.ranking .ch-row:nth-child(6n+2) .ch-bar { background: var(--dourado); }
+.ranking .ch-row:nth-child(6n+3) .ch-bar { background: var(--accent-mid); }
+.ranking .ch-row:nth-child(6n+4) .ch-bar { background: var(--progress); }
+.ranking .ch-row:nth-child(6n+5) .ch-bar { background: var(--ok); }
+.ranking .ch-row:nth-child(6n+6) .ch-bar { background: var(--n-500); }
+
+/* Prontuário: cabeçalho do paciente vira um card com faixa vinho */
+.cab-paciente { position: relative; overflow: hidden; padding: 20px 24px 20px 30px; background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius-xl); box-shadow: var(--sombra-card); }
+.cab-paciente::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 6px; background: var(--vinho-grad); }
+.cab-paciente .iniciais { background: var(--surface); box-shadow: 0 0 0 3px var(--accent-mid), 0 0 0 6px var(--accent-soft); }
+
+/* ------------------------------------------- desktop: menu lateral fixo */
+.so-desk-topo { display: none !important; }
+@media (min-width: 961px) {
+  :root { --lateral: var(--lateral-w); }
+  .app { padding-left: var(--lateral-w); }
+
+  .topo { box-shadow: none; border-bottom-color: var(--border-soft); }
+  .topo-in { max-width: none; height: 88px; padding: 0 40px; gap: 18px; }
+  .topo .cel-titulo.so-cel { display: block !important; flex: 1; min-width: 0; font-family: var(--font-display); font-weight: 420; font-size: 30px; letter-spacing: -0.02em; color: var(--text-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .topo .marca { position: fixed; z-index: 61; left: 0; top: 0; width: var(--lateral-w); height: 88px; padding: 0 0 0 30px; gap: 12px; background: var(--surface); border-right: 1px solid var(--border-soft); }
+  .topo .marca-sinal { width: 36px; height: 36px; border-radius: 10px; background: var(--vinho-grad); }
+  .marca-txt { display: block !important; }
+  .marca-txt b { font-size: 19px; }
+
+  .nav { position: fixed; z-index: 60; left: 0; top: 88px; bottom: 0; width: var(--lateral-w); height: auto; flex-direction: column; align-items: stretch; gap: 4px; padding: 10px 0 24px; background: var(--surface); border-right: 1px solid var(--border-soft); overflow-y: auto; }
+  .nav a { height: 52px; padding: 0 20px 0 30px !important; gap: 16px; font-size: 15px !important; font-weight: 500; border-radius: 0; }
+  .nav a svg { display: block; width: 22px; height: 22px; stroke-width: 1.8; }
+  .nav a:hover { color: var(--text-strong); background: linear-gradient(90deg, var(--accent-softer), transparent); }
+  .nav a[aria-current="page"] { color: var(--accent); font-weight: 600; }
+  .nav a[aria-current="page"]::after { left: 0 !important; right: auto !important; top: 8px; bottom: 8px; width: 5px; height: auto; border-radius: 0 8px 8px 0; background: var(--vinho-grad); animation: entra-barra var(--dur-3) var(--ease-assenta); }
+  .nav .contagem { margin-left: auto; }
+
+  .busca-btn { width: 300px; height: 48px; padding: 0 18px; gap: 10px; border: 0; border-radius: 999px; background: var(--bg); font-size: 14px; }
+  .busca-btn:hover { background: var(--n-50); }
+  .redondo { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 50%; background: var(--bg); color: var(--text-muted); transition: background-color var(--dur-2), color var(--dur-2); }
+  .redondo:hover { background: var(--n-50); color: var(--accent); }
+  .so-desk-topo { display: grid !important; }
+  .avatar-btn .iniciais-sm { width: 48px; height: 48px; font-size: 14px; }
+  .menu-pop { top: 58px; }
+
+  main { max-width: 1440px; padding: 30px 40px 110px; }
+  /* o cabeçalho já mostra o nome da tela */
+  .h1-repetido > .cab h1, .h1-repetido .dash-cab .rotulo { display: none; }
+  .h1-repetido > .cab .meta { margin-top: 0; font-size: 14px; }
+  .pr-lado { top: 108px; }
+  .agenda-wrap { max-height: calc(100vh - 254px); }
+}
+@media (min-width: 961px) and (max-width: 1240px) {
+  .busca-btn { width: 48px; padding: 0; justify-content: center; }
+}
+@keyframes entra-barra { from { transform: scaleY(.3); opacity: 0; } }
