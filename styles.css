@@ -847,7 +847,7 @@ div.campo { display: grid; gap: 8px; }
   .so-cel { display: grid !important; }
   .cel-titulo.so-cel { display: block !important; }
   .topo-in { height: 56px; padding: 0 10px; gap: 8px; }
-  .marca { display: none; }
+  .topo .marca { display: none; }
   .busca-btn { display: none; }
   .cel-titulo { flex: 1; min-width: 0; font-family: var(--font-display); font-weight: 450; font-size: 21px; color: var(--text-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .nav { position: fixed; z-index: 60; left: 0; top: 0; bottom: 0; width: min(290px, 86vw); height: auto; flex-direction: column; align-items: stretch; gap: 2px; padding: 14px 12px;
@@ -982,4 +982,69 @@ main { padding-top: 24px; }
   .bento-topo .apoio { flex: 0 0 64%; border-top: 0 !important; border-left: 1px solid var(--border-soft); padding: 16px !important; }
   .bento-topo .apoio:first-child { border-left: 0; }
   .cab h1, .cab-paciente h1 { font-size: 28px; }
+}
+
+/* =================================================== CELULAR (ajuste fino) */
+.recursos-cel { display: none; }
+.so-cel-inline { display: none; }
+@media (max-width: 960px) {
+  /* a barra do topo já mostra o nome da tela */
+  .h1-repetido > .cab h1, .h1-repetido .dash-cab .rotulo { display: none; }
+  .h1-repetido > .cab .meta { margin-top: 0; font-size: 13.5px; }
+}
+@media (max-width: 640px) {
+  .so-cel-inline { display: inline; }
+  .so-desk { display: none; }
+  main { padding: 16px 14px 96px; }
+  .cab { margin-bottom: 12px; gap: 10px; }
+  .cab .acoes { gap: 8px; }
+  .cab .acoes:has(.nav-dia) { flex-wrap: nowrap; }
+
+  /* Agenda: barra compacta numa linha, um profissional por vez */
+  .data-agenda { display: none; }
+  .nav-dia .btn { height: 40px; }
+  .nav-dia .btn.icone { width: 40px; }
+  #novo-ag { flex: 1; }
+  .semana { margin: 0 -14px 8px; padding: 0 14px; }
+  .legenda { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 -14px 10px; padding: 0 14px; white-space: nowrap; }
+  .legenda .leg { flex: none; }
+  .recursos-cel { display: flex; gap: 4px; padding: 3px; margin-bottom: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+  .recursos-cel button { flex: 1; min-width: 0; height: 40px; border: 0; border-radius: 9px; background: none; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 14px; color: var(--text-muted); transition: background-color var(--dur-2), color var(--dur-2); }
+  .recursos-cel button b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .recursos-cel button .num { font-size: 12px; opacity: .75; }
+  .recursos-cel button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+  .agenda-wrap { margin: 0 -14px; max-height: none; border-radius: 0; border-left: 0; border-right: 0; overflow: visible; }
+  .grade-agenda { grid-template-columns: 46px minmax(0, 1fr); min-width: 0; }
+  .coluna-ag { display: none; }
+  .coluna-ag.ativa-cel { display: block; }
+  .col-cab { top: 56px; height: 52px; }
+  .regua .vazio-cab { top: 56px; }
+  .agora span { display: block; }
+  .bloco { left: 4px; right: 8px; }
+  .bloco .b-l1 { font-size: 13.5px; }
+
+  /* tabelas */
+  .tel-cel { white-space: nowrap; font-size: 12.5px; }
+  td, th { padding: 10px 8px; }
+  td:first-child, th:first-child { padding-left: 12px; }
+  td:last-child, th:last-child { padding-right: 12px; }
+  td [data-status] { max-width: 128px; }
+
+  /* alvos de toque maiores */
+  .btn.sm { height: 36px; padding: 0 12px; }
+  .chip, button.chip { height: 34px; padding: 0 13px; }
+  .icone-btn.sm { width: 36px; height: 36px; }
+  .segmentos button { height: 36px; }
+  .check { width: 22px; height: 22px; }
+  .tarefa { gap: 12px; padding: 13px 0; }
+  .linha { padding: 13px 4px 13px 0; }
+  .abas-pac a { padding: 12px 12px 13px; }
+
+  /* gaveta e modais ocupam a tela, com a ação ao alcance do polegar */
+  .veu { padding: 0; align-items: end; }
+  .modal { border-radius: 18px 18px 0 0; max-height: 92vh; overflow-y: auto; padding: 20px 18px 24px; animation: sobe-folha var(--dur-3) var(--ease-assenta); }
+  .paleta { border-radius: 0 0 16px 16px; align-self: start; }
+  .veu:has(.paleta) { align-items: start; }
+  .gaveta-rodape { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+  @keyframes sobe-folha { from { transform: translateY(24px); opacity: 0; } }
 }

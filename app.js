@@ -265,6 +265,7 @@ function render() {
       view.append(wrap);
       entradaNova = caminho !== ultimaTela;
       fn(wrap, ...m.slice(1));
+      wrap.classList.toggle('h1-repetido', ['', 'pacientes', 'servicos', 'divulgacao', 'consultorio', 'hoje'].includes(caminho));
       if (caminho !== ultimaTela) { escalonar(wrap); contar(wrap); } else {
         wrap.classList.add('sem-entrada');
         $$('[data-conta]', wrap).forEach((e) => (e.textContent = formatarConta(e.dataset.formato, e.dataset.conta)));
@@ -975,7 +976,7 @@ function telaPacientes(el) {
       const prox = d.agendamentos.filter((a) => a.pacienteId === p.id && new Date(a.inicio) >= inicioDoDia(0) && a.status !== 'faltou').sort((a, b) => a.inicio.localeCompare(b.inicio))[0];
       return `<tr class="clicavel" data-ir="#/pacientes/${p.id}">
         <td><div class="titulo">${esc(p.nome)}</div>${p.alerta ? `<span class="alerta-clinico" style="margin-top:3px;font-size:11px">${esc(p.alerta)}</span>` : `<div class="sub">${idade(p.nascimento) !== null ? `${idade(p.nascimento)} anos` : 'Idade não informada'}</div>`}</td>
-        <td class="num">${p.telefone ? esc(p.telefone) : '<span class="atrasada">sem telefone</span>'}</td>
+        <td class="num tel-cel">${p.telefone ? esc(p.telefone) : '<span class="atrasada">sem telefone</span>'}</td>
         <td class="esconde-cel">${esc(p.convenio)}</td>
         <td class="esconde-cel">${esc(p.origem)}</td>
         <td class="esconde-cel num">${p.medida ? `<span class="${paFora(p.medida.pa) ? 'atrasada' : ''}">${esc(p.medida.pa)}</span> <span class="faint small">${dataCurta(p.medida.em)}</span>` : '<span class="faint">—</span>'}</td>
@@ -1459,7 +1460,7 @@ function telaServicos(el) {
         <input type="search" id="q" placeholder="Filtrar por nome ou sigla"></label>
     </div>
     <div class="tabela-wrap"><table>
-      <thead><tr><th>Sigla</th><th>Exame ou consulta</th><th class="direita">Particular</th><th class="esconde-cel direita">Duração</th><th class="esconde-cel">Convênio</th><th class="esconde-cel direita">No mês</th><th>Status</th></tr></thead>
+      <thead><tr><th class="esconde-cel">Sigla</th><th>Exame ou consulta</th><th class="direita">Particular</th><th class="esconde-cel direita">Duração</th><th class="esconde-cel">Convênio</th><th class="esconde-cel direita">No mês</th><th>Status</th></tr></thead>
       <tbody id="tb"></tbody>
     </table></div>`;
   const desenhar = () => {
@@ -1468,8 +1469,8 @@ function telaServicos(el) {
     const lista = d.servicos.filter((s) => (filtro === 'ativos' ? s.status !== 'arquivado' : s.status === filtro)).filter((s) => !q || s.nome.toLowerCase().includes(q) || s.sigla.toLowerCase().includes(q));
     $('#tb', el).innerHTML = lista.length ? lista.map((s) => `
       <tr class="clicavel" data-ir="#/servicos/${s.id}">
-        <td><span class="sigla" style="min-width:70px">${esc(s.sigla)}</span></td>
-        <td><div class="titulo">${esc(s.nome)}</div><div class="sub">${esc(s.categoria)}</div></td>
+        <td class="esconde-cel"><span class="sigla" style="min-width:70px">${esc(s.sigla)}</span></td>
+        <td><div class="titulo">${esc(s.nome)}</div><div class="sub">${esc(s.categoria)}<span class="so-cel-inline"> · <span class="mono">${esc(s.sigla)}</span></span></div></td>
         <td class="direita num">${brl(s.preco)}</td>
         <td class="esconde-cel direita num">${s.duracao} min</td>
         <td class="esconde-cel">${s.convenio ? 'Aceita' : '<span class="faint">Só particular</span>'}</td>
@@ -1700,6 +1701,7 @@ function blocoAgenda(a) {
   </button>`;
 }
 
+let recursoCel = null; // no celular, a agenda mostra um profissional/sala por vez
 function telaAgenda(el) {
   const d = D();
   const q = new URLSearchParams(location.hash.split('?')[1] || '');
@@ -1729,7 +1731,7 @@ function telaAgenda(el) {
           <a class="btn icone" href="#/?dia=${desloca(1)}" aria-label="Próximo dia"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
         </div>
         <input type="date" id="ir-dia" value="${k}" aria-label="Ir para a data" class="data-agenda">
-        <button class="btn acento" id="novo-ag">+ Novo agendamento</button>
+        <button class="btn acento" id="novo-ag">+ <span class="so-desk">Novo agendamento</span><span class="so-cel-inline">Agendar</span></button>
       </div>
     </div>
     <div class="semana">
@@ -1741,13 +1743,16 @@ function telaAgenda(el) {
     <div class="legenda" aria-label="Resumo por status">
       ${['confirmado', 'agendado', 'na-recepcao', 'em-atendimento', 'finalizado', 'faltou'].map((s) => `<span class="leg ag-${s}"><i></i>${STATUS_AG[s]}<b class="num">${conta(s)}</b></span>`).join('')}
     </div>
+    <div class="recursos-cel" role="group" aria-label="Profissional ou sala">
+      ${d.recursos.map((r) => `<button type="button" data-rcel="${r.id}" aria-pressed="${r.id === (recursoCel || d.recursos[0].id)}"><b>${esc(r.nome.replace(/^Dra?\.\s/, '').split(' ')[0])}</b><span class="num">${lista.filter((a) => a.recurso === r.id).length}</span></button>`).join('')}
+    </div>
     <div class="agenda-wrap">
       <div class="grade-agenda" style="--colunas:${d.recursos.length}">
         <div class="regua" aria-hidden="true"><div class="col-cab vazio-cab"></div><div class="regua-trilho" style="height:${altura}px">
           ${Array.from({ length: fecha - abre + 1 }, (_, i) => `<span style="top:${i * 60 * PX_MIN}px">${pad(abre + i)}:00</span>`).join('')}
         </div></div>
         ${d.recursos.map((r, ri) => { const doR = lista.filter((a) => a.recurso === r.id); return `
-          <section class="coluna-ag" aria-label="${esc(r.nome)}">
+          <section class="coluna-ag${r.id === (recursoCel || d.recursos[0].id) ? ' ativa-cel' : ''}" data-col="${r.id}" aria-label="${esc(r.nome)}">
             <header class="col-cab"><span class="iniciais-sm">${esc(iniciais(r.nome.replace(/^Dra?\.\s/, '')))}</span><span class="col-txt"><b>${esc(r.nome)}</b><small>${esc(r.sub)}</small></span><span class="num col-n">${doR.length}</span></header>
             <div class="trilho" data-recurso="${r.id}" style="height:${altura}px" title="Clique num horário vazio para agendar">
               ${ehHoje ? `<div class="agora${ri === 0 ? ' com-hora' : ''}" aria-hidden="true"><span class="num"></span></div>` : ''}
@@ -1759,6 +1764,11 @@ function telaAgenda(el) {
     ${lista.length === 0 ? `<p class="aviso info" style="margin-top:16px">Nenhum horário marcado neste dia. Clique num horário vazio da coluna para agendar.</p>` : ''}`;
 
   $('#ir-dia', el).onchange = (e) => { if (e.target.value) location.hash = `#/?dia=${e.target.value}`; };
+  $$('[data-rcel]', el).forEach((b) => (b.onclick = () => {
+    recursoCel = b.dataset.rcel;
+    $$('[data-rcel]', el).forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    $$('.coluna-ag', el).forEach((c) => c.classList.toggle('ativa-cel', c.dataset.col === recursoCel));
+  }));
   $('#novo-ag', el).onclick = () => modalAgendamento({ dia: k });
 
   // Linha do "agora", atualizada a cada minuto
