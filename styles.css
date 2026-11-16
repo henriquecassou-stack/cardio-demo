@@ -1048,3 +1048,11 @@ main { padding-top: 24px; }
   .gaveta-rodape { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
   @keyframes sobe-folha { from { transform: translateY(24px); opacity: 0; } }
 }
+
+/* Menu do celular: o cabeçalho (onde o menu mora) sobe acima do fundo escuro enquanto o menu está aberto.
+   Sem isso o fundo ficava por cima do menu e o toque numa opção só fechava o menu. */
+@media (max-width: 960px) {
+  .lateral-aberta .topo { z-index: 70; }
+  .veu-lateral { z-index: 65; }
+  .lateral-aberta { overflow: hidden; }
+}
