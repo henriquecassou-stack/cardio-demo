@@ -176,6 +176,16 @@ function atualizarContagens() {
   $('#cont-agenda').textContent = restantes ? restantes : '';
   $('#nome-consultorio').textContent = D().settings.nome;
 }
+// Tema claro/escuro: preferência de quem usa, guardada só neste navegador
+function alternarTema() {
+  const escuro = document.documentElement.dataset.tema !== 'escuro';
+  if (escuro) document.documentElement.dataset.tema = 'escuro'; else delete document.documentElement.dataset.tema;
+  try { localStorage.setItem('ritmo-tema', escuro ? 'escuro' : 'claro'); } catch { /* sem armazenamento: vale só nesta visita */ }
+  $('#tema').setAttribute('aria-label', escuro ? 'Usar tema claro' : 'Usar tema escuro');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', escuro ? '#1f1715' : '#fffbf6');
+}
+$('#tema').addEventListener('click', alternarTema);
+if (document.documentElement.dataset.tema === 'escuro') $('#tema').setAttribute('aria-label', 'Usar tema claro');
 function lateral(abrir) {
   document.body.classList.toggle('lateral-aberta', abrir);
   $('#abrir-lateral').setAttribute('aria-expanded', String(abrir));
@@ -189,6 +199,7 @@ document.addEventListener('click', (e) => {
   if (!e.target.closest('#menu') && !e.target.closest('#abrir-menu')) $('#menu').hidden = true;
   const acao = e.target.closest('[data-acao]')?.dataset.acao;
   if (acao === 'fechar-lateral') lateral(false);
+  if (acao === 'tema') alternarTema();
   if (acao === 'recomecar') {
     if (!confirm('Recomeçar a demonstração? Tudo o que você fez aqui será apagado e os dados de exemplo voltam ao início.')) return;
     db.recomecar(); ultimaTela = null; location.hash = '#/'; render(); toast('Demonstração recomeçada com os dados de exemplo');
@@ -466,6 +477,7 @@ function telaHoje(el) {
 
     <div class="bento-topo">
     <section class="heroi" aria-label="Recebido no mês e meta">
+      <svg class="heroi-ecg" viewBox="0 0 1000 140" preserveAspectRatio="none" aria-hidden="true"><path d="${tiraECG(1000, 84, 150, 3.4, 30)}"/></svg>
       <div class="heroi-num">
         <p class="rotulo" id="heroi-rotulo">Recebido em ${esc(m.nome)}</p>
         <p class="heroi-valor"><span class="moeda">R$</span><span id="heroi-v"${A ? ` data-anim="count" data-to="${Math.round(m.recebido)}" data-format="plain" data-delay="200" data-dur="1050"` : ''}>${Motion.fmt.plain(m.recebido)}</span></p>
